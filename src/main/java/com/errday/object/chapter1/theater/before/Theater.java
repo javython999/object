@@ -1,4 +1,4 @@
-package com.errday.object.chapter1;
+package com.errday.object.chapter1.theater.before;
 
 public class Theater {
 

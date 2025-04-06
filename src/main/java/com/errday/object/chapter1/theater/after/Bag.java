@@ -1,4 +1,4 @@
-package com.errday.object.chapter1;
+package com.errday.object.chapter1.theater.after;
 
 import lombok.Setter;
 
@@ -18,19 +18,32 @@ public class Bag {
         this.amount = amount;
     }
 
-    public boolean hasInvitation() {
-        return invitation != null;
+    public Long hold(Ticket ticket) {
+        if (hasInvitation()) {
+            setTicket(ticket);
+            return 0L;
+        } else {
+            setTicket(ticket);
+            minusAmount(ticket.getFee());
+            return ticket.getFee();
+        }
     }
 
     public boolean hasTicket() {
         return ticket != null;
     }
 
-    public void minusAmount(Long amount) {
+    private boolean hasInvitation() {
+        return invitation != null;
+    }
+
+    private void minusAmount(Long amount) {
         this.amount -= amount;
     }
 
-    public void plusAmount(Long amount) {
+    private void plusAmount(Long amount) {
         this.amount += amount;
     }
+
+
 }
