@@ -14,15 +14,16 @@
 ## 01 티켓 판매 애플리케이션 구현하기
 ```mermaid
 classDiagram
-    Audience -- |> Bag
-    Bag --|> Invitation
-    Bag --|> Ticket
-    TicketSeller --|> TicketOffice
-    TicketOffice --|> Ticket
-    Theater ..|> Audience
-    Theater ..|> TicketOffice
-    Theater ..|> Bag
-    Theater ..|> Ticket
+    direction LR
+    Audience --> Bag
+    Bag --> Invitation
+    Bag --> Ticket
+    TicketSeller --> TicketOffice
+    TicketOffice --> Ticket
+    Theater ..> Audience
+    Theater ..> TicketOffice
+    Theater ..> Bag
+    Theater ..> Ticket
     
     class Audience {
         +getBag()
@@ -106,16 +107,17 @@ Theater가 관람객의 가방과 판매원의 매표소에 직접 접근한다�
 
 ```mermaid
 classDiagram
-    Audience -- |> Bag
-    Bag --|> Invitation
-    Bag --|> Ticket
-    TicketSeller --|> TicketOffice
-    TicketSeller ..|> Audience
-    TicketSeller ..|> Ticket
-    TicketOffice --|> Ticket
-    TicketOffice ..|> Audience
-    Theater ..|> Audience
-    Theater --|> TicketSeller
+    direction LR
+    Audience --> Bag
+    Bag --> Invitation
+    Bag --> Ticket
+    TicketSeller --> TicketOffice
+    TicketSeller ..> Audience
+    TicketSeller ..> Ticket
+    TicketOffice --> Ticket
+    TicketOffice ..> Audience
+    Theater ..> Audience
+    Theater --> TicketSeller
     
     class Audience {
         -bag
@@ -218,6 +220,66 @@ classDiagram
 메시지를 수신한 객체는 스스로 결정에 따라 자율적으로 메시지를 처리할 방법을 결정한다.
 이 처럼 메시지를 처리하기 위한 자신만의 방법을 메서드(method)라고 한다.
 
+## 03 할인 요금 구하기
+> 할인 요금 계산을 위한 협력 시작하기
 
+```java
+public Money calculateMovieFee(Screening screening) {
+    return fee.minus(discountPolicy.calculateDiscountAmount(screening));
+}
+```
+Movie 클래스의 calculateMovieFee 메서드는 discountPolicy에 calculateDiscountAmount 메시지를 전송해 알인 요금을 받환 받는다.
+Movie는 기본 요금인 fee에서 반환된 할인 요금을 차감한다. 코드 어디에도 할인 정책을 판단하는 코드는 존재하지 않는다.
+단지 discountPolicy에게 메세지를 전송할 뿐이다. 이 코드에는 객체 지향에서 중요하다고 여겨지는 `상송(inheritance)`, `다형성(polymorphism)` 개념이 숨겨져 있다.
+그리고 그 기반에는 `추상화(abstraction)`라는 원리가 숨겨져 있다.
 
+> 할인 정책과 할인 조건
 
+할인 정책은 금액 할인 정책과 비율 할인 정책으로 구분된다. 두 가지 할인 정책은 각각 `AmountDiscountPolicy`와 `PercentDiscountPolicy`로 구현한다.
+두 클래스는 대부분의 코드가 유사하고 할인 요금을 계산하는 방식이 조금 다르다.
+중복 코드를 제거하기 위해서 부모 클래스인 `DiscountPolicy` 안에 중복 코드를 두고 
+AmountDiscountPolicy와 PercentDiscountPolicy가 이 클래스를 상속 받게 한다.
+
+영화 예매 시스템에는 순번 조건과 기간 조건의 두 가지 할인 조건이 존재한다.
+각각 `SequenceCondition`과 `PeriodCondition` 클래스로 구현한다.
+
+```mermaid
+classDiagram
+  direction LR
+  Move --> DiscountPolicy:discountPolicy
+  DiscountPolicy -->"*" DiscountCondition:conditions
+  AmountDiscountPolicy --|> DiscountPolicy
+  PercentDiscountPolicy --|> DiscountPolicy
+  SequenceCondition ..|> DiscountCondition
+  PeriodCondition ..|> DiscountCondition
+  
+  class Move {
+    +calculateMoveFee()
+  }
+  class DiscountPolicy {
+    +calculateDiscountAmount()
+    #getDiscountAmount()
+  }
+  class DiscountCondition {
+    <<interface>>
+    +isSatisfiedBy()
+  }
+  class AmountDiscountPolicy {
+    #getDiscountAmount()
+  }
+  class PercentDiscountPolicy {
+    #getDiscountAmount()
+  }
+  class SequenceCondition {
+    +isSatisfiedBy()
+  }
+  class PeriodCondition {
+    +isSatisfiedBy()
+  }
+```
+
+> 할인 정책 구성하기
+
+하나의 영화에 대해 단 하나의 할인 정책만 설정할 수 있지만 할인 조건의 경우에는 여러 개를 적용할 수 있다.
+`Movie`와 `DiscountPolicy`의 생성자는 이런 제약을 강제한다. 생성자 파라미터 목록을 이용해 초기화에 필요한 정보를 전달하도록 강제하면
+올바른 상태를 가진 객체의 생성을 보장할 수 있다.

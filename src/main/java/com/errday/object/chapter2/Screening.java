@@ -18,6 +18,10 @@ public class Screening {
         return whenScreened;
     }
 
+    public LocalDateTime getStartTime() {
+        return whenScreened;
+    }
+
     public boolean isSequence(int sequence) {
         return this.sequence == sequence;
     }
@@ -31,6 +35,6 @@ public class Screening {
     }
 
     public Money calculateFee(int audienceCount) {
-        return movie.calculateMoveFee(this).times(audienceCount);
+        return movie.calculateMovieFee(this).times(audienceCount);
     }
 }
