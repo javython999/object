@@ -254,27 +254,27 @@ classDiagram
   PeriodCondition ..|> DiscountCondition
   
   class Move {
-    +calculateMoveFee()
+      +calculateMoveFee()
   }
-  class DiscountPolicy {
-    +calculateDiscountAmount()
-    #getDiscountAmount()
+  class DiscountPolicy { 
+      +calculateDiscountAmount()
+      #getDiscountAmount()
   }
-  class DiscountCondition {
-    <<interface>>
-    +isSatisfiedBy()
+  class DiscountCondition { 
+      <<interface>>
+      +isSatisfiedBy()
   }
   class AmountDiscountPolicy {
-    #getDiscountAmount()
+      #getDiscountAmount()
   }
   class PercentDiscountPolicy {
-    #getDiscountAmount()
+      #getDiscountAmount()
   }
   class SequenceCondition {
-    +isSatisfiedBy()
+      +isSatisfiedBy()
   }
   class PeriodCondition {
-    +isSatisfiedBy()
+      +isSatisfiedBy()
   }
 ```
 
@@ -283,3 +283,108 @@ classDiagram
 하나의 영화에 대해 단 하나의 할인 정책만 설정할 수 있지만 할인 조건의 경우에는 여러 개를 적용할 수 있다.
 `Movie`와 `DiscountPolicy`의 생성자는 이런 제약을 강제한다. 생성자 파라미터 목록을 이용해 초기화에 필요한 정보를 전달하도록 강제하면
 올바른 상태를 가진 객체의 생성을 보장할 수 있다.
+
+## 04 상속과 다형성
+> 컴파일 시간 의존성과 실행 시간 의존성
+```mermaid
+classDiagram
+    direction LR
+    Movie --> DiscountPolicy: discountPolicy
+    AmountDiscountPolicy ..|> DiscountPolicy
+    PercentDiscountPolicy ..|> DiscountPolicy
+    class Movie {
+        +calculateMovieFee()
+    }
+    class DiscountPolicy {
+        +caculateDiscountAmount()
+        #getDiscountAmount()
+    }
+    class AmountDiscountPolicy {
+        #getDiscountAmount()
+    }
+    class PercentDiscountPolicy {
+      #getDiscountAmount()
+    }
+```
+`Movie` 클래스가 `DiscountPolicy` 클래스와 연결돼 있다. 영화 요금을 계산하기 위해서는 추상 클래스인 `DiscountPolicy`가 아니라 
+`AmountDiscountPolicy`, `PercentDiscountPolicy`의 인스턴스가 필요하다.
+runtime 시에 `AmountDiscountPolicy`나 `PercentDiscountPolicy`의 인스턴스에 의존해야 한다. 하지만 코드 수준에서는
+두 클래스중 어떤 것에도 의존하지 않는다. 오직 추상 클래스인 `DiscountPolicy`에만 의존하고 있다. 
+
+```java
+Movie avatar = new Movie(
+        "아바타",
+        Duration.ofMinutes(120),
+        Money.wons(10000),
+        new AmountDiscountPolicy(Money.wons(800), ...)
+);
+
+Movie avatar = new Movie(
+        "아바타",
+        Duration.ofMinutes(120),
+        Money.wons(10000),
+        new PercentDiscountPolicy(0.1, ...)
+);
+```
+`Movie`의 생성자에서 `DiscountPolicy` 타입의 객체를 인자로 받는다. 
+실행 시점에  `Movie`인스턴스는 `AmountDiscountPolicy`나 `PercentDiscountPolicy`의 인스턴스에 의존하게 된다.
+확장 가능한 객체지향 설계가 가지는 특징은 코드의 의존성과 실행 시점의 의존성이 다르다는 것이다.
+
+코드의 의존성과 실행 시점의 의존성이 다르면 코드를 이해하기 어렵지만 더 유연해지고 확장 가능해진다.
+설계가 유연해질수록 코드를 이해하고 디버깅하기는 점점 더 어려워진다는 사실을 기억하라. 반면 유연성을 억제하면 코드를 이해하고 디버깅하기는 쉬워지지만
+재사용성과 확장가능성이 낮아진다.
+
+
+> 차이에 의한 프로그래밍
+
+상속은 객체지향에서 코드를 재사용하기 위해 가장 널리 사용되는 방법이다.
+상속은 기존 클래스를 기반으로 새로운 클래스를 쉽고 빠르게 추가할 수 있는 간편한 방법을 제공한다.
+`AmountDiscountPolicy`와 `PercentDiscountPolicy`의 경우 `DiscountPolicy`에서 정의한 추상 메서드인 `getDiscountAmount()` 메서드를 오버라이딩해서
+`DiscountPolicy`의 행동을 수정한다는 것을 알 수 있다.
+이처럼 부모 클래스와 다른 부분만을 추가해서 새로운 클래스를 쉽고 빠르게 만드는 방법을 `차이에 의한 프로그래밍(programming by difference)`이라고 부른다.
+
+> 상속과 인터페이스
+
+자식 클래스는 상속을 통해 부모 클래스의 인터페이스를 물려받기 때문에 부모 클래스 대신 사용될 수 있다.
+컴파일러는 코드 상에서 부모 클래스가 나오는 모든 장소에 자식 클래스를 사용하는 것을 허용한다.
+이처럼 자식 클래스가 부모 클래스를 대신하는 것을 `업캐스팅(upcasting)`이라고 부른다.
+
+> 다형성
+
+`메시지와 메서드는 다른 개념이다.` `Movie`는 `DiscountPolicy`의 인스턴스에게 `calculateDiscountAmount` 메시지를 전송한다.
+실행되는 메서드는 `Movie`와 상호작용하기 위해 연결된 객체의 클래스가 무엇인가에 따라 달라진다.
+`Movie`는 동일한 메시지 전송을 하지만 실제로 어떤 메서드가 실행될 것인지는 메시지를 수신하는 객체의 클래스가 무엇이냐에 따라 달라진다.
+이를 `다형성`이라고 부른다. 다형성은 컴파일 시간 의존성과 실행 시간 의존성을 다르게 만들 수 있는 객체지향의 특성을 이용해 서로 다른 메서드를 실행할 수 있게 한다.
+
+다형성을 구현하는 방법은 매우 다양하지만 메시지에 응답하기 위해 실행될 메서드를 컴파일 시점이 아닌 실행 시점에 결정한다는 공통점이 있다.
+메시지와 메서드를 실행 시점에 바인딩 한다는 것이다. 이를 `지연 바인딩(lazy binding)`또는 `동적 바인딩(dynamic binding)`이라고 부른다.
+반면 전통적인 함수 호출처럼 컴파일 시점에 실행될 함수나 프로시저를 결정하는 것을 `초기 바인딩(early binding)` 또는 `정적 바인딩(static binding)`이라고 부른다.
+객체지향이 컴파일 시점의 의존성과 실행 시점의 의존성을 분리하고 하나의 메시지를 선택적으로 서로 다른 메서드에 연결할 수 있는 이유가 바로 지연 바인딩이라는 메커니즘을 사용하기 때문이다.
+
+> 인터페이스와 다형성
+
+구현은 공유할 필요가 없고 순수하게 인터페이스만 공유하고 싶을 때가 있다. 이를 위해 C#과 자바에서는 `인터페이스`라는 프로그래밍 용소를 제공한다.
+추상 클래스를 이용해 다형성을 구현했던 할인 정책과 달리 할인 조건은 구현을 공유할 필요가 없기 때문에 인터페이스를 이용해 타입 계층을 구현 했다.
+
+```mermaid
+classDiagram
+    direction LR
+    DiscountPolicy -->"*" DiscountCondition: conditions
+    SequenceCondition ..|> DiscountCondition
+    PeriodCondition ..|> DiscountCondition
+    class DiscountPolicy {
+        +calculateDiscountAmount()
+        #getDiscountAmount()
+    }
+    class DiscountCondition {
+        <<interface>>
+        +isSatisfiedBy()
+    }
+    class SequenceCondition {
+        +isSatisfiedBy()
+    }
+    class PeriodCondition {
+        +isSatisfiedBy()
+    } 
+```
+
