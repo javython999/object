@@ -1,4 +1,4 @@
-![Image](https://github.com/user-attachments/assets/d4533df2-425b-46c3-ba47-61874e72b5fb)
+**![Image](https://github.com/user-attachments/assets/d4533df2-425b-46c3-ba47-61874e72b5fb)
 # 00. 들어가며
 ## 01 패러다임의 시대
 과학혁명이란 과거의 패러다임이 새로운 패러다임에 의해 대체됨으로써 정상과학의 방향과 성격이 변하는 것을 의미한다. 
@@ -387,4 +387,187 @@ classDiagram
         +isSatisfiedBy()
     } 
 ```
+## 05 추상화와 유연성
+> 추상화의 힘
+
+추상화를 사용하면 세부적인 내용을 무시한 채 상위 정책을 쉽고 간단한게 표현할 수 있다.
+추상화를 이용해 상위 정책을 표현하면 기존 구조를 수정하지 않고도 새로운 기능을 쉽게 추가하고 확장할 수 있다.
+설계를 유연하게 만들 수 있다.
+
+> 유연한 설계
+
+할인 정책이 없는 영화는 `Movie`에 설정된 기본 금액을 그대로 사용하면 된다.
+```java
+public class Movie {
+    public Money calculateMoveFee(Screening screening) {
+        if (discount == null) {
+            return fee;
+        }
+        
+        return fee.minus(discountPolicy.calculateDiscountAmount(screening));
+    }
+}
+```
+하지만 이 방식은 할인 정책이 없는 경우를 예외 케이스로 취급하기 때문에 지금까지 일관성있던 협력 방식이 무너지게 된다.
+기존 할인 정책은 할인할 금액을 계산하는 책임이 `DiscountPolicy`의 자식 클래스에 있었지만 할인 정책이 없는 경우에는 할인 금액이 0원이라는 사실을
+결정하는 책임이 `DiscountPolicy`가 아닌 `Movie`쪽에 있기 때문이다. 책임의 위치를 결정하기 위해 조건문을 사용하는 것은 협력의 설계 측면에서 대부분의 경우 좋지 않은 선택이다.
+<U>항상 예외 케이스를 최소화하고 일관성을 유지할 수 있는 방법을 선택하라.</U>
+
+일관성 유지를 위해 0원의 할인 요금을 계산하는 `NoneDiscountPolicy` 클래스를 추가하자.
+```java
+public class NoneDiscountPolicy extends DiscountPolicy {
+
+  @Override
+  protected Money getDiscountAmount(Screening screening) {
+    return Money.ZERO;
+  }
+}
+```
+```java
+Movie avatar = new Movie(
+        "스타워즈",
+        Duration.ofMinutes(210),
+        Money.wons(10000),
+        new NoneDiscountPolicy()
+);
+```
+기존 `Movie`와 `DiscountPolicy`를 수정하지 않고 `NoneDiscountPolicy`라는 클래스를 추가하는 것만으로 애플리케이션의 기능을 확장했다.
+이처럼 추상화를 중심으로 코드의 구조를 설계하면 유연하고 확장 가능한 설계를 만들 수 있다. 결론은 간단하다. 유연성이 필요한 곳에 추상화를 사용하라.
+
+> 추상 클래스와 인터페이스 트레이드 오프
+
+`NoneDiscountPolicy` 클래스의 코드를 자세히 살펴보면 `getDiscountAmount()` 메서드가 어떤 값을 반환하더라도 상관이 없다는 사실을 알 수 있다.
+부모 클래스인 `DiscountPolicy`에서 할인 조건이 없을 경우에는 `getDiscountAmount()`를 호출하지 않기 때문이다.
+
+부모 클래스인 `DiscountPolicy`와 `NoneDiscountPolicy`를 개념적으로 결합시킨다. 이 문제를 해결하는 방법은 `DiscountPolicy`를 인터페이스로 바꾸고
+`NoneDiscountPolicy`가 `DiscountPolicy`의 `getDiscountAmount()` 메서드가 아닌 `calculateDiscountAmount()` 오퍼레이션을 오버라이딩 하도록 변경하는 것이다.
+
+```java
+public interface DiscountPolicy {
+    Money calculateDiscountAmount(Screening screening);
+}
+```
+원래의 `DiscountPolicy`는 `DefaultDiscountPolicy`로 변경하고 새로 만든 `DiscountPolicy` 인터페이스를 구현하도록 한다.
+
+```java
+public abstract class DefaultDiscountPolicy implements DiscountPolicy {
+
+    private List<DiscountCondition> conditions = Collections.emptyList();
+
+    public DefaultDiscountPolicy(DiscountCondition... conditions) {
+        this.conditions = List.of(conditions);
+    }
+
+    @Override
+    public Money calculateDiscountAmount(Screening screening) {
+        for (DiscountCondition condition : conditions) {
+            if (condition.isSatisfiedBy(screening)) {
+                return getDiscountAmount(screening);
+            }
+        }
+
+        return Money.ZERO;
+    }
+
+    abstract protected Money getDiscountAmount(Screening screening);
+}
+```
+이제 `NoneDiscountPolicy`가 `DiscountPolicy` 인터페이스를 구현하도록 변경하면 개념적인 혼란과 결합을 제거할 수 있다.
+
+```java
+public class NoneDiscountPolicy implements DiscountPolicy {
+
+    @Override
+    public Money calculateDiscountAmount(Screening screening) {
+        return Money.ZERO;
+    }
+}
+
+```
+
+```mermaid
+classDiagram
+  direction LR
+  Movie --> DiscountPolicy: discountPolicy
+  NoneDiscountPolicy ..|> DiscountPolicy
+  DefaultDiscountPolicy ..|> DiscountPolicy
+  DefaultDiscountPolicy -->"*" DiscountCondition:conditions
+  AmountDiscountPolicy --|> DefaultDiscountPolicy
+  PercentDiscountPolicy --|> DefaultDiscountPolicy
+  SequenceCondition ..|> DiscountCondition
+  PeriodCondition ..|> DiscountCondition
+  class Movie {
+      +calculateMovieFee()
+  }
+  class DiscountPolicy { 
+      <<interface>>
+      +calculateDiscountAmount()
+  }
+  class NoneDiscountPolicy {
+      +calculateDiscountAmount()
+  }
+  class DefaultDiscountPolicy {
+    +calculateDiscountAmount()
+    #getDiscountAmount()
+  }
+  class AmountDiscountPolicy { 
+      #getDiscountAmount()
+  }
+  class PercentDiscountPolicy {
+      #getDiscountAmount()
+  }
+  
+  class DiscountCondition {
+    <<interface>>
+    +isSatisfiedBy()
+  }
+  class SequenceCondition {
+    +isSatisfiedBy()
+  }
+  class PeriodCondition {
+    +isSatisfiedBy()
+  }
+```
+구현과 관련된 모든 것들이 트레이드오프의 대상이 될 수 있따는 사실이다.
+비록 사소한 결정이라도 트레이드오프를 통해 얻어진 결론과 그렇지 않은 결론 사이의 차이는 크다.
+고민하고 트레이드오프하라.
+
+> 코드 재사용
+
+상속은 코드를 재사용하기 위해 널리 사용되는 방법이다.
+그러나 널리 사용되는 방법이라고 해서 가장 좋은 방법인 것은 아니다.
+상속보다는 합성(Composition)이 더 좋은 방법이라는 이야기를 많이 들었을 것이다.
+상속 대신 합성을 선호하는 이유는 무엇일까?
+
+> 상속
+
+상속은 객체지향 코드를 재사용하기 위해 널리 사용되는 기법이다. 하지만 두 가지 관점에서 설계에 안 좋은 영향을 미친다.
+
+1. 캡슐화 위반
+2. 설계를 유연하지 못하게 만든다.
+
+상속의 가장 큰 문제는 캡슐화를 위반한다는 것이다.
+상속을 이용하기 위해서는 부모 클래스의 구조를 잘 알고 있어야 한다.
+결과적으로 부모 클래스의 구현이 자식 클래스에게 노출 되기 때문에 캡슐화가 약화 된다.
+이는 결국 부모 클래스와 자식 클래스의 결합도를 높이게 되고 부모 클래스의 변경은 자식 클래스의 변경까지 이어지게 된다.
+
+상속의 두 번째 단점은 설계가 유연하지 않다는 것이다.
+상속은 부모 클래스와 자식 클래스 사이의 관계를 컴파일 시점에 결정한다. 따라서 실행 시점에 객체의 종류를 변경하는 것이 불가능하다.
+`AmountDiscountPolicy`의 인스턴스를 `PercentDiscountPolicy`로 변경해야 될 경우 최선의 방법은 `PercentDiscountPolicy` 인스턴스를 생성 후
+`AmountDiscountPolicy`의 상태를 복사하는 것뿐이다. 이것은 부모 클래스와 자식 클래스가 강하게 결합돼 있기 때문에 발생하는 문제다.
+
+> 합성
+
+`Movie`는 요금을 계산하기 위해 `DiscountPolicy`의 코드를 재사용한다.
+이 방법이 상속과 다른 점은 상속이 부모 클래스의 코드와 자식 클래스의 코드를 컴파일 시점에 하나의 단위로 강하게 결합하는 데 비해
+`Movie`가 `DiscountPolicy`의 인터페이스를 통해 약하게 결합된다는 것이다.
+`Movie`는 `DiscountPolicy`가 외부에 `calculateDiscountAmount` 메서드를 제공한다는 사실만 알고 내부 구현에 대해서는 전혀 알지 못한다.
+이처럼 인터페이스에 정의된 메서드를 통해서만 코드를 재사용하는 방법을 `합성`이라고 부른다.
+
+합성은 상속의 두 가지 문제를 모두 해결한다.
+인터페이스에 정의된 메시지를 통해서만 재사용이 가능하기 때문에 구현을 효과적으로 캡슐화 한다.
+의존하는 인터페이스를 교체하는 것이 비교적 쉽기 때문에 설계를 유연하게 만든다.
+따라서 코드 재사용을 위해서는 상속보다는 합성을 선호하는 것이 더 좋은 방법이다.
+그렇다고 해서 상속을 절대 사용하지 말라는 것은 아니다. 다형성을 위해 인터페이스를 재사용하는 경우에는
+상속과 합성을 함께 조합해서 사용할 수 밖에 없다.
 

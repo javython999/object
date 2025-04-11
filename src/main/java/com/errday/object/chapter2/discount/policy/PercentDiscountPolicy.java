@@ -4,7 +4,7 @@ import com.errday.object.chapter2.Money;
 import com.errday.object.chapter2.Screening;
 import com.errday.object.chapter2.discount.DiscountCondition;
 
-public class PercentDiscountPolicy extends DiscountPolicy {
+public class PercentDiscountPolicy extends DefaultDiscountPolicy {
 
     private final double percent;
 
