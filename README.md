@@ -746,3 +746,121 @@ flowchart LR
 객체가 다른 협력에 참여할 때는 다른 역할로 보여진다.
 협력의 관점에서 동일한 역할을 수행하는 객체들은 서로 대체 가능하다.
 역할은 특정한 객체의 종류를 캡슐화하기 때문에 동일한 역할을 수행하고 계약을 준수하는 대체 가능한 객체들은 다형적이다.
+
+***
+
+# 04. 설계 품질과 트레이드오프
+## 01 데이터 중심의 영화 예매 시스템
+> 데이터를 준비하자
+
+책임 중심의 설계가 '책임이 무엇인가'를 묻는 것으로 시작한다면 데이터 중심의 설계는 객체가 내부에 저장해야하는 '데이터가 무엇인가'를 묻는 것으로 시작한다.
+
+```java
+public class Movie {
+    private String title;
+    private Duration runningTime;
+    private Money fee;
+    private List<DiscountCondition> discountConditionList;
+
+    private MovieType movieType;
+    private Money discountAmount;
+    private double discountPercentage;
+}
+```
+가장 두드러지는 차이점은 할인 조건의 목록이 인스턴스 변수로 `Movie` 안에 직접 포함돼 있다는 것이다.
+또한 할인 정책을 `DiscountPolicy`라는 별도의 클래스로 분리했던 예전 예제와 달리 
+금액 할인 정책에 사용되는 할인 금액과 비율 할인 정책에 사용되는 할인 비율을 `Movie` 안에서 직접 정의하고 있다.
+
+할인 정책은 영화별로 오직 하나만 지정할 수 있기에 한 시점에 `discountAmount`와 `discountPercentage` 중 하나의 값만 사용될 수 있다.
+영화의 할인 정책의 종류는 어떻게 알 수 있을까? 할인 정책의 종류를 결정하는 것이 바로 `movieType`이다.
+
+데이터 중심의 설계에서는 객체가 포함해야 하는 데이터에 집중한다.
+객체의 종류를 저장하는 인스턴스 변수(movieType)와 인스턴스의 종류에 따라 배타적으로 사용될 인스턴스 변수를 하나의 클래스 안에 포함시키는 방식은 데이터 중심의 설계 안에서 흔히 볼수 있는 패턴이다.
+
+```mermaid
+classDiagram 
+    direction LR
+
+    Reservation --> Screening:"screening"
+    Reservation --> Customer:"customer"
+    Screening --> Movie:"movie"
+    Movie -->"*" DiscountCondition:"discountConditions"
+    
+    class Screening {
+        sequence
+        whenScreened
+    }
+    
+    class Movie {
+        title
+        runningTime
+        fee
+        movieType
+        discountAmount
+        discountPercent
+    }
+    
+    class DiscountCondition {
+        type
+        sequence
+        dayOfWeek
+        startTime
+        endTime
+    }
+    
+    class Reservation {
+        fee
+        audienceCount
+    }
+    
+    class Customer {
+        
+    }
+```
+
+> 영화를 예매하자
+
+```java
+public class ReservationAgency {
+
+    public Reservation reserve(Screening screening, Customer customer, int audienceCount) {
+
+        Movie movie = screening.getMovie();
+
+        boolean discountable = false;
+        for (DiscountCondition condition : movie.getDiscountConditionList()) {
+            if (condition.getDiscountType() == DiscountType.PEROID) {
+                discountable = screening.getWhenScreened().getDayOfWeek().equals(condition.getDayOfWeek())
+                        && condition.getStartTime().compareTo(screening.getWhenScreened().toLocalTime()) <= 0
+                        && condition.getEndTime().compareTo(screening.getWhenScreened().toLocalTime()) >= 0;
+            } else {
+                discountable = condition.getSequence() == screening.getSequence();
+            }
+
+            if (discountable) {
+                break;
+            }
+        }
+
+        Money fee;
+        if (discountable) {
+            Money discountAmount = Money.ZERO;
+            switch (movie.getMovieType()) {
+                case AMOUNT_DISCOUNT -> discountAmount = movie.getDiscountAmount();
+                case PERCENT_DISCOUNT -> discountAmount = movie.getFee().times(movie.getDiscountPercentage());
+                case NONE_DISCOUNT -> discountAmount = Money.ZERO;
+            }
+
+            fee = movie.getFee().minus(discountAmount);
+        } else {
+            fee = movie.getFee();
+        }
+
+        return new Reservation(customer, screening, fee, audienceCount);
+    }
+}
+```
+reserve 메서드는 크게 두 부분으로 나눌수 있다.
+첫 번째는 `DiscountCondition`에 대해 루프를 돌면서 할인 가능 여부를 확인하는 for문이다.
+두 번째는 `discountable` 변수의 값으 체크하고 적절한 활인 정책에 따라 예매 요금을 계산하는 if문이다.
+책임 중심의 설계 방법과 비교해 보면서 두 방법의 장단점을 파악해보자.
