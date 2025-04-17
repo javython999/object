@@ -887,3 +887,95 @@ reserve 메서드는 크게 두 부분으로 나눌수 있다.
 
 높은 응집도와 낮은 결합도를 추구하는 이유는 단 한가지다.
 그것이 설계를 변경하기 쉽게 만들기 때문이다.
+
+## 03 데이터 중심의 영화 예매 시스템의 문제점
+> 캡슐화 위반
+
+데이터 중심으로 설계한 `Movie` 클래스를 보면 오직 메서드를 통해서만 객체의 내부 상태에 접근할 수 있다는 것을 알 수 있다.
+```java
+public class Movie {
+    private Money fee;
+    
+    public Money getFee() {
+        return fee;
+    }
+    
+    public void setFee(Money fee) {
+        this.fee = fee;
+    }
+}
+```
+위 코드는 직접 객체의 내부에 접근할 수 없기 때문에 캡슐화의 원칙을 지키고 있는 것처럼 보인다.
+하지만 `getFee()`, `setFee()` 메서드는 `Movie` 내부에 `Money` 타입의 fee라는 인스턴스 변수가 존재한다는 사실을 퍼블릭 인터페이스에 노골적으로 드러낸다.
+`Moive`가 캡슐화의 원칙을 어기게 된 근본적인 원인은 객체가 수행할 책임이 아니라 내부에 저장할 데이터에 초점을 맞췄기 때문이다.
+
+설계할 때 협력에 관해 고민하지 않으면 캡슐화를 위반하는 과도한 접근자와 수정자를 가지게 되는 경향이 있다.
+객체가 사용될 문맥을 추측할 수밖에 없는 경우 개발자는 어떤 상황에서도 해당 객체가 사용될 수 있게 최대한 많은 접근자 메서드를 추가하게 되는 것이다.
+앤런 홀럽(Allen Holub)은 이처럼 접근자와 수정자에 과도하게 의존하는 설계 방식을 `추측에 의한 설계 전략(design-by-guessing strategy)`라고 부른다.
+그 결과, 캡슐화의 원칙을 위반하는 변경에 취약한 설계를 얻게 된다.
+
+> 높은 결합도
+
+데이터 중심 설계가 가지는 또 다른 단점은 여러 데이터 객체들을 사용하는 제어로직이 특정 객체 안에 집중되기 때문에 하나의 제어 객체가 다수의 데이터 객체에 강하게 결합된다는 것이다.
+이 결합도로 인해 어떤 데이터 객체를 변경하더라도 제어 객체를 함께 변경할 수 밖에 없다.
+
+```mermaid
+classDiagram
+    Screening --> Movie:movie
+    Movie -->"*" DiscountCondition: discountCondition
+    Reservation --> Screening:screening
+    Reservation --> Customer:customer
+    ReservationAgency ..> Reservation
+    ReservationAgency ..> Screening
+    ReservationAgency ..> Movie
+    ReservationAgency ..> DiscountCondition
+    class Screening {
+        sequence
+        whenScreened
+    }
+    class Movie {
+        title
+        runningTime
+        fee
+        movieType
+        discountAmount
+        discountPercent
+    }
+    class DiscountCondition {
+        type
+        sequence
+        dayOfWeek
+        startTime
+        endTime
+    }
+    class Reservation {
+        fee
+        audienceCount
+    }
+    class Customer {
+        
+    }
+    class ReservationAgency {
+        reserve()
+    }
+``` 
+영화 예매 시스템의 대부분의 제어 로직을 가지고 있는 `ReservationAgency`가 모든 데이터 객체에 의존한다.
+`DiscountCondition`, `Screening`이 수정되면 `ReservationAgency`도 수정해야 한다. 
+시스템의 모든 변경이 `ReservationAgency`의 변경을 유발한다.
+
+데이터 중심의 설계는 전체 시스템을 하나의 거대한 의존성 덩어리로 만들어 버리기 때문에 어떤 변경이라도 일단 발생하고 나면 시스템 전체가 요동칠 수밖에 없다.
+
+> 낮은 응집도
+
+서로 다른 이유로 변경되는 코드가 하나의 모듈 안에 공존할 때 응집도가 낮다고 말한다.
+낮은 응집도는 두 가지 측면에서 설계에 문제를 일으킨다.
+
+* 변경의 이유가 서로 다른 코드들을 하나의 모듈 안에 뭉쳐놓았기 때문에 변경과 아무 상관이 없는 코드들이 영향을 받게 된다.
+  * `ReservationAgency` 안에 할인 정책을 선택하는 코드와 할인 조건을 판단하는 코드가 함께 존재하기 때문에 새로운 할인 정책을 추가하는 작업이 할인 조건에도 영향을 미칠 수 있다.
+  * 어떤 코드를 수정한 후 아무런 상관도 없던 코드에 문제가 발생하는 것은 모듈의 응집도가 낮을 때 발생하는 대표적인 증상이다.
+* 하나의 요구사항 변경을 반영하기 위해 동시에 여러 모듈을 수정해야 한다.
+  * 응집도가 낮은 경우 모듈에 위치해야할 책임의 일부가 엉뚱한 곳에 위치하게 되기 때문이다.
+  * 새로운 할인 정책이 추가 될 경우 `MovieType`에 새로운 할인 정책을 표현하는 열거형 값을 추가하고, `ReservationAgency`의 `reserve()` 메서드의 switch 구문에 새로운 case 절을 추가해야 한다.
+  * 또한 새로운 할인 정책에 따라 할인 요금을 계산하기 위해 필요한 데이터도 `Movie`에 추가해야 한다.
+
+어떤 요구사항 변경을 수용하기 위해 하나 이상의 클래스를 수정해야 하는 것은 응집도가 낮다는 증거다.
