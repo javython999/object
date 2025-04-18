@@ -979,3 +979,362 @@ classDiagram
   * 또한 새로운 할인 정책에 따라 할인 요금을 계산하기 위해 필요한 데이터도 `Movie`에 추가해야 한다.
 
 어떤 요구사항 변경을 수용하기 위해 하나 이상의 클래스를 수정해야 하는 것은 응집도가 낮다는 증거다.
+
+## 04 자율적인 객체를 향해
+> 캡슐화를 지켜라
+
+캡슐화는 설계의 제 1원리다.
+낮은 응집도와 높은 결합도라는 문제로 몸살을 앓게 된 근본적인 원인은 캡슐화의 원칙을 위반했기 때문이다.
+
+```java
+class Rectangle {
+    private int left;
+    private int top;
+    private int right;
+    private int bottom;
+    
+    public Rectangle(int left, int top, int right, int bottom) {
+        this.left = left;
+        this.top = top;
+        this.right = right;
+        this.bottom = bottom;
+    }
+    
+    public int getLeft() {
+        return this.left;
+    }
+    
+    public void setLeft(int left) {
+        this.left = left;
+    }
+
+    public int getTop() {
+      return this.top;
+    }
+  
+    public void setTop(int top) {
+      this.top = top;
+    }
+
+    public int getRight() {
+      return this.right;
+    }
+  
+    public void setRight(int right) {
+      this.right = right;
+    }
+
+    public int getBottom() {
+      return this.bottom;
+    }
+  
+    public void setBottom(int bottom) {
+      this.bottom = bottom;
+    }
+}
+```
+
+```java
+class AnyClass {
+    void anyMethod(Rectangle rectangle, int multiple) {
+        rectangle.setRight(rectangle.getRight() * multiple);
+        rectangle.setBottom(rectangle.getBottom() * multiple);
+    }
+}
+```
+사각형의 너비와 높이를 증가시키는 코드다.
+이 코드는 많은 문제점이 도사리고 있다.
+1. 코드 중복
+   * 다른 곳에서도 사각형의 너비와 높이를 증가시키는 코드가 필요하다면 아마 그곳에서도 getter, setter를 호출하는 유사한 코드가 존재하게 될 것이다.
+2. 변경에 취약
+   * right와 bottom 대신 length, height를 이용해서 사각형을 표현하도록 수정한다면 getter, setter는 내부 구현을 인터페이스의 일부로 만들기 때문에 인스턴스 변수들의 존재를 외부에 노출하게 된다.
+   * 결과적으로 각각의 getter, setter들은 getLength, setLength, getHeight, setHeight로 변경해야하고 이 변경은 getter, setter를 사용하는 모든 코드에 영향을 끼친다
+
+```java
+class Rectangle {
+    private int left;
+    private int top;
+    private int right;
+    private int bottom;
+    
+    public Rectangle(int left, int top, int right, int bottom) {
+        this.left = left;
+        this.top = top;
+        this.right = right;
+        this.bottom = bottom;
+    }
+    
+    public void enlarge(int multiple) {
+        right *= multiple;
+        bottom *= multiple;
+    }
+}
+```
+Rectangle을 변경하는 주체를 외부 객체에서 Rectangle로 이동시켰다.
+자신의 크기는 Rectangle 스스로가 증가시키도록 `책임을 이동`시킨 것이다. 이것이 바로 객체가 스스로 책임진다는 말의 의미다.
+
+> 스스로 자신의 데이터를 책임지는 객체
+
+객체는 단순한 데이터 제공자가 아니다.
+객체 내부에 저장되는 데이터보다 객체가 협력에 참여하면서 수행할 책임을 정의하는 오퍼레이션이 더 중요하다.
+
+"이 객체가 어떤 데이터를 포함해야 하는가?"라는 질문은 다음과 같은 두 개의 개별적인 질문으로 분리해야 한다.
+* 이 객체가 어떤 데이터를 포함해야 하는가?
+* 이 객체가 데이터에 대해 수행해야 하는 오퍼레이션은 무엇인가?
+
+두 질문을 조합하면 객체의 내부 상태를 저장하는 방식과 저장된 상태에 대해 호출할 수 있는 오퍼레이션의 집합을 얻을 수 있다.
+다시 말해 새로운 데이터 타입을 만들 수 있는 것이다.
+
+```java
+public class DiscountCondition {
+    private DiscountType discountType;
+    private int sequence;
+    private DayOfWeek dayOfWeek;
+    private LocalTime startTime;
+    private LocalTime endTime;
+}
+```
+첫 번째 질문은 어떤 데이터를 관리해야 하는 지를 묻는 것이다.
+`DiscountCondition`이 관리하는 데이터를 결정해 놓았다.
+
+두 번째 질문은 이 데이터에 대해 수행할 수 있는 오퍼레이션이 무엇인가를 묻는 것이다.
+할인 조건에는 순번 조건과 기간 조건의 두 가지 종류가 존재한다.
+`DiscountCondition`은 순번 조건일 경우 `sequence`를 이용해서 할인 여부를 결정하고,
+기간 조건일 경우에는 `dayOfWeek`, `startTime`, `endTime`을 이용해 할인 여부를 결정한다.
+
+두 가지 할인 조건을 판단할 수 있게 두 개의 `isDiscountable` 메서드가 필요하다.
+
+```java
+public class DiscountCondition {
+
+    private DiscountType discountType;
+    private int sequence;
+    private DayOfWeek dayOfWeek;
+    private LocalTime startTime;
+    private LocalTime endTime;
+
+
+    public boolean isDiscountable(DayOfWeek dayOfWeek, LocalTime time) {
+        if (discountType != DiscountType.PEROID) {
+            throw new IllegalArgumentException();
+        }
+
+        return this.dayOfWeek.equals(dayOfWeek)
+                && !this.startTime.isAfter(time)
+                && !this.endTime.isBefore(time);
+    }
+
+    public boolean isDiscountable(int sequence) {
+        if (discountType != DiscountType.SEQUENCE) {
+            throw new IllegalArgumentException();
+        }
+
+        return this.sequence == sequence;
+    }
+}
+```
+
+이제 `Movie`를 구현하자.
+첫 번째 질문은 `Movie`가 어떤 데이터를 포함해야 하는가를 묻는 것이다.
+
+```java
+public class Movie {
+    private String title;
+    private Duration runningTime;
+    private Money fee;
+    private List<DiscountCondition> discountConditionList;
+
+    private MovieType movieType;
+    private Money discountAmount;
+    private double discountPercentage;
+}
+```
+
+두 번째 질문은 이 데이터를 처리하기 위해 어떤 오퍼레이션이 필요한지 묻는 것이다.
+`Moive`가 포함하는 데이터를 살펴보면 영화 요금을 계산하는 오퍼레이션과 할인 여부를 판단하는 오퍼레이션이 필요할 것 같다.
+
+먼저 요금을 계산하는 오퍼레이션을 구현하자.
+요금을 계산하기 위해서는 할인 정책을 염두에 둬야 한다. 
+따라서 `DiscountCondition`과 마찬가지로 할인 정책의 타입을 반환하는 `getMovieType` 메서드와 
+정책별로 요금을 계산하는 세 가지 메서드를 구현해야 한다.
+
+```java
+public class Movie {
+    private String title;
+    private Duration runningTime;
+    private Money fee;
+    private List<DiscountCondition> discountConditionList;
+
+    private MovieType movieType;
+    private Money discountAmount;
+    private double discountPercentage;
+
+    public Money calculateAmountDiscountedFee() {
+        if (movieType != MovieType.AMOUNT_DISCOUNT) {
+            throw new IllegalStateException();
+        }
+
+        return fee.minus(discountAmount);
+    }
+
+    public Money calculatePercentDiscountedFee() {
+        if (movieType != MovieType.PERCENT_DISCOUNT) {
+            throw new IllegalStateException();
+        }
+
+        return fee.minus(fee.times(discountPercentage));
+    }
+
+    public Money calculateNoneDiscountedFee() {
+        if (movieType != MovieType.NONE_DISCOUNT) {
+            throw new IllegalStateException();
+        }
+
+        return fee;
+    }
+}
+```
+`Moive`는 `DiscountCondition`의 목록을 포함하기 때문에 할인 여부를 판단하는 오퍼레이션 역시 포함해야 한다.
+`isDiscountable` 메서드를 추가하자. 
+
+```java
+public class Movie {
+  public boolean isDiscountable(LocalDateTime whenScreened, int sequence) {
+    for (DiscountCondition discountCondition : discountConditionList) {
+      if (discountCondition.getDiscountType() == DiscountType.PEROID) {
+        if (discountCondition.isDiscountable(whenScreened.getDayOfWeek(), whenScreened.toLocalTime())) {
+          return true;
+        }
+      } else {
+        if (discountCondition.isDiscountable(sequence)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+}
+```
+
+이제 `Screening`을 살펴보자.
+`Screening`이 관리하는 데이터와 메서드다.
+
+```java
+public class Screening {
+
+  private Movie movie;
+  private int sequence;
+  private LocalDateTime whenScreened;
+
+  public Screening(Movie movie, int sequence, LocalDateTime whenScreened) {
+    this.movie = movie;
+    this.sequence = sequence;
+    this.whenScreened = whenScreened;
+  }
+
+  public Money calculateFee(int audienceCount) {
+    switch (movie.getMovieType()) {
+      case AMOUNT_DISCOUNT:
+        if (movie.isDiscountable(whenScreened, sequence)) {
+          return movie.calculateAmountDiscountedFee().times(audienceCount);
+        }
+        break;
+      case PERCENT_DISCOUNT:
+        if (movie.isDiscountable(whenScreened, sequence)) {
+          return movie.calculatePercentDiscountedFee().times(audienceCount);
+        }
+        break;
+      case NONE_DISCOUNT:
+        return movie.calculateNoneDiscountedFee().times(audienceCount);
+    }
+    return movie.calculateNoneDiscountedFee().times(audienceCount);
+  }
+  
+
+  public Movie getMovie() {
+    return movie;
+  }
+
+  public void setMovie(Movie movie) {
+    this.movie = movie;
+  }
+
+  public int getSequence() {
+    return sequence;
+  }
+
+  public void setSequence(int sequence) {
+    this.sequence = sequence;
+  }
+
+  public LocalDateTime getWhenScreened() {
+    return whenScreened;
+  }
+
+  public void setWhenScreened(LocalDateTime whenScreened) {
+    this.whenScreened = whenScreened;
+  }
+}
+
+```
+
+`ReservationAgency`는 `Screening`의 `calculateFee` 메서드를 호출해 예매 요금을 계산한 후 계산되는 요금을 이용해 `Reservation`을 생성한다.
+```java
+public class ReservationAgency {
+
+    public Reservation reservation(Screening screening, Customer customer, int audienceCount) {
+        Money fee = screening.calculateFee(audienceCount);
+        return new Reservation(customer, screening, fee, audienceCount);
+    }
+}
+```
+결합도 측면에서 `ReservationAgency`에 의존성이 몰려있던 첫 번째 설계보다는 개선된 것으로 보인다.
+이 것은 두 번째 설계가 첫 번째 설계보다 내부 구현을 더 면밀하게 캡슐화 하고 있기 때문이다.
+
+```mermaid
+classDiagram
+    Screening --> Movie:movie
+    Movie -->"*" DiscountCondition: discountCondition
+    Reservation --> Screening:screening
+    Reservation --> Customer:customer
+    ReservationAgency ..> Reservation
+    ReservationAgency ..> Screening
+    
+    class Screening {
+        sequence
+        whenScreened
+    }
+    class Movie {
+        title
+        runningTime
+        fee
+        movieType
+        discountAmount
+        discountPercent
+        getType()
+        calculateAmountDiscountedFee()
+        calculatePercentDiscountedFee()
+        calculateNoneDiscountedFee()
+        isDiscountable(whenScreened, sequence)
+    }
+    class DiscountCondition {
+        type
+        sequence
+        dayOfWeek
+        startTime
+        endTime
+        isDiscountable(dayOfWeek, whenScreened)
+        isDiscountable(sequence)
+    }
+    class Reservation {
+        fee
+        audienceCount
+    }
+    class Customer {
+        
+    }
+    class ReservationAgency {
+        reserve(screening, customer, audienceCount)
+    }
+```

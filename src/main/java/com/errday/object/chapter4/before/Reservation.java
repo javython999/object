@@ -1,4 +1,4 @@
-package com.errday.object.chapter4;
+package com.errday.object.chapter4.before;
 
 
 public class Reservation {

@@ -1,4 +1,4 @@
-package com.errday.object.chapter4;
+package com.errday.object.chapter4.after;
 
 public enum MovieType {
     AMOUNT_DISCOUNT,

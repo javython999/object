@@ -1,6 +1,7 @@
-package com.errday.object.chapter4;
+package com.errday.object.chapter4.after;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class Movie {
@@ -12,6 +13,46 @@ public class Movie {
     private MovieType movieType;
     private Money discountAmount;
     private double discountPercentage;
+
+    public Money calculateAmountDiscountedFee() {
+        if (movieType != MovieType.AMOUNT_DISCOUNT) {
+            throw new IllegalStateException();
+        }
+
+        return fee.minus(discountAmount);
+    }
+
+    public Money calculatePercentDiscountedFee() {
+        if (movieType != MovieType.PERCENT_DISCOUNT) {
+            throw new IllegalStateException();
+        }
+
+        return fee.minus(fee.times(discountPercentage));
+    }
+
+    public Money calculateNoneDiscountedFee() {
+        if (movieType != MovieType.NONE_DISCOUNT) {
+            throw new IllegalStateException();
+        }
+
+        return fee;
+    }
+
+    public boolean isDiscountable(LocalDateTime whenScreened, int sequence) {
+        for (DiscountCondition discountCondition : discountConditionList) {
+            if (discountCondition.getDiscountType() == DiscountType.PEROID) {
+                if (discountCondition.isDiscountable(whenScreened.getDayOfWeek(), whenScreened.toLocalTime())) {
+                    return true;
+                }
+            } else {
+                if (discountCondition.isDiscountable(sequence)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     public String getTitle() {
         return title;
