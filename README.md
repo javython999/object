@@ -1338,3 +1338,65 @@ classDiagram
         reserve(screening, customer, audienceCount)
     }
 ```
+
+## 05 하지만 여전히 부족하다.
+> 캡슐화 위반
+
+`DiscountCondition`의 `isDiscountable` 메서드는 시그니처를 통해 객체 내부의 상태를 그대로 드러냈다.
+`DiscountCondition`의 객체 내부의 상태가 변경되면 `isDiscountable`을 호출하는 모든 코드에 영향을 끼칠 것이다.
+내부 구현의 변경이 외부로 퍼져나가는 파급 효과(ripple effect)는 캡슐화가 부족하다는 명백한 증거다.
+따라서 변경 후의 설계는 자기 자신을 스스로 처리한다는 점에서 이전의 설계보다 분명히 개선됐지만 여전히 내부의 구현을 캡슐화하는 데는 실패한 것이다.
+
+`Movie`의 요금 계산 메서드들은 객체의 파라미터나 반환 값을 내부에 포함된 속성에 대한 어떤 정보도 노출하지 않는다.
+따라서 캡슐화의 원칙을 지키고 있다고 생각할 수도 있지만, `Movie` 역시 내부 구현을 인터페이스에서 노출시키고 있다.
+여기서 노출시키는 것은 할인 정책의 종류다. `calculateAmountDiscountedFee`, `calculatePercentDiscountedFee`, `calculateNoneDiscountedFee` 라는
+세 개의 메서드는 할인 정책의 세 가지 종류를 드러내고 있다.
+만약 새로운 할인 정책이 추가 되거나 기존 할인 정책이 제거 된다면 이 메서드들에 의존하는 모든 클라이언트가 영향을 받을 것이다.
+
+```
+캡슐화의 진정한 의미
+캡슐화는 단순히 객체 내부의 데이터를 외부로부터 감추는 것 이상을 의미한다.
+캡슐화는 변경될 수 있는 어떤 것이다로 감추는 것을 의미한다.
+내부 구현의 변경으로 인해 외부의 객체가 영향을 받는다면 캡슐화를 위반한 것이다.
+```
+
+> 높은 결합도
+
+캡슐화의 위반으로 인해 `DiscountCondtion`의 내부 구현이 외부로 노출됐기 때문에 `Movie`와 `DiscountCondition` 사이의 결합도는 높을 수 밖에 없다.
+두 객체 사이의 결합도가 높은 경우 한 객체의 구현을 변경할 경우 다른 객체에게 변경의 영향이 전파될 확률이 높다.
+
+```java
+public class Movie {
+    
+  public boolean isDiscountable(LocalDateTime whenScreened, int sequence) {
+    for (DiscountCondition discountCondition : discountConditionList) {
+      if (discountCondition.getDiscountType() == DiscountType.PEROID) {
+        if (discountCondition.isDiscountable(whenScreened.getDayOfWeek(), whenScreened.toLocalTime())) {
+          return true;
+        }
+      } else {
+        if (discountCondition.isDiscountable(sequence)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+}
+```
+* `DiscountCondition`의 기간 할인 조건의 명칭이 PERIOD에서 다른 값으로 변경된다면 `Movie`를 수정해야 한다.
+* `DiscountCondition`의 종류가 추가되거나 삭제된다면 `Movie`의 `isDiscountable` 메서드의 `if ~ else` 구문을 수정해야 한다.
+* `DiscountCondition`의 만족 여부를 판단하는데 필요한 정보가 변경되면 `Movie`의 `isDiscountable` 메서드 시그니처도 함께 변경이 되어야 한다.
+
+`DiscountCondition`의 인터페이스가 아니라 구현을 변경해도 `Movie`를 변경해야 한다는 것은 결합도가 높다는 것을 의미한다. 
+
+> 낮은 응집도
+
+앞에서 설명한 것처럼 `DiscountConditon`이 할인 여부를 판단하는데 필요한 정보가 변경된다면 `Movie`의 `isDiscountable` 메서드로 전달해야하는 파라미터의 종류를 변경해야 하고,
+이로 인해 `Screening`에서 `Moive`의 `isDiscountable` 메서드를 호출하는 부분도 함께 변경해야 한다.
+결과적으로 할인 조건의 종류를 변경하기 위해서는 `DiscountCondtion`, `Movie`, `Screening`을 함께 수정해야 한다.
+하나의 변경을 수용하기 위해 코드의 여러 곳을 동시에 변경해야 한다는 것은 응집도가 낮다는 증거다.
+
+응집도가 낮은 이유도 캡슐화를 위반했기 때문이다.
+앞서 설명한 경우 `DiscountCondition`이나 `Movie`에 위치해야하는 로직이 `Screening`으로 새어나왔기 때문이다.
