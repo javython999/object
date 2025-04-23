@@ -3,8 +3,6 @@ package com.errday.object.chapter4.after;
 
 import java.time.LocalDateTime;
 
-import static com.errday.object.chapter4.after.MovieType.PERCENT_DISCOUNT;
-
 public class Screening {
 
     private Movie movie;

@@ -1609,3 +1609,217 @@ flowchart LR
     예매하라 --> screening[Screening] --> 가격을_계산하라 --> movie[Movie] --> 할인_여부를_판단하라 --> discountCondition[DiscountCondition]
     screening[Screening] --> reservation[Reservation] 
 ```
+## 03 구현을 통한 검증
+`Screening`은 영화를 예매할 책임을 맡으며 그 결과로 `Reservation` 인스턴스를 생성할 책임을 수행해야 한다.
+`Screening`은 예매에 대한 정보 전문가인 동시에 `Reservation`의 창조자다.
+
+협력의 관점에서 `Screening`은 '예매하라' 메시지에 응답할 수 있어야 한다.
+이 메시지를 처리할 수 있는 메서드를 구현하자.
+
+```java
+public class Screening {
+    
+    public Reservation reserve(Customer customer, int audienceCount) {
+        return null;
+    }
+}
+```
+책임이 결정됐으므로 책임을 수행하는데 필요한 인스턴스 변수를 결정해야 한다.
+`Screening`은 상영시간, 상영 순번을 인스턴스 변수로 포함한다.
+`Movie`에 '가격을 계산하라' 메시지를 전송해야 하기에 `Movie`에 대한 참조도 포함한다.
+
+```java
+public class Screening {
+    
+    private Movie movie;
+    private int sequence;
+    private LocalDateTime whenScreened;
+    
+    public Reservation reserve(Customer customer, int audienceCount) {
+        return null;
+    }
+}
+```
+영화를 예매하기 위해서는 `Movie`에게 '가격을 계산하라' 메시지를 전송해서 계산된 요금을 반환받아야 한다.
+`calculateFee` 메서드는 이렇게 반환된 요금에 예매 인원수를 곱해서 전체 예매 요금을 계산한 후 `Reservation`을 생성해서 반환한다.
+
+```java
+public class Screening {
+
+    private Movie movie;
+    private int sequence;
+    private LocalDateTime whenScreened;
+
+    public Reservation reserve(Customer customer, int audienceCount) {
+        return new Reservation(customer, this, calculateFee(audienceCount), audienceCount);
+    }
+
+    private Money calculateFee(int audienceCount) {
+        return movie.calculateMovieFee(this).times(audienceCount);
+    }
+}
+```
+`Screening`을 구현하는 과정에서 `Movie`에 전송하는 메시지의 시그니처를 `calculateMovieFee(Screening screening)`으로 선언했다는 사실을 주목하라.
+이 메시지는 수신자인 `Movie`가 아니라 송신자인 `Screening`의 의도를 표현한다.
+여기서 중요한 것은 `Screening`이 `Movie`의 내부 구현에 대한 어떤 지식도 없이 전송할 메시지를 결정했다는 것이다.
+이처럼 `Movie`의 구현을 고려하지 않고 필요한 메시지를 결정하면 `Movie`의 내부 구현을 깔끔하게 캡슐화 할 수 있다.
+메시지가 객체를 선택하도록 책임 주도 설계의 방식을 따르면 캡슐화와 낮은 결합도라는 목표를 비교적 손쉽게 달성할 수 있다.
+
+`Movie`는 `Screening`과 협력하기 위해 `calculateMovieFee` 메시지에 응답하기 위해 메서드를 구현해야 한다.
+```java
+public class Movie {
+
+    public Money calculateMovieFee(Screening screening) {
+        return null;
+    }
+}
+```
+`Movie`는 기본 요금, 할인 조건, 할인 정책 등의 정보를 알아야 한다.
+그리고 현재의 `Movie`가 어떤 할인 정책이 적용된 영화인지를 나타내기 위한 영화 종류를 인스턴스 변수로 포함한다.
+
+```java
+public class Movie {
+
+    private String title;
+    private Duration duration;
+    private Money fee;
+    private List<DiscountCondition> discountConditions;
+    private MovieType movieType;
+    private Money discountAmount;
+    private double discountPercentage;
+    
+    public Money calculateMovieFee(Screening screening) {
+        return null;
+    }
+}
+```
+
+`MovieType`은 할인 정책의 종류를 나열하는 단순한 열거형 타입이다.
+
+```java
+public enum MovieType {
+    AMOUNT_DISCOUNT,
+    PERCENT_DISCOUNT,
+    NONE_DISCOUNT,
+}
+```
+`Movie`는 먼저 `discountConditions`를 순회하면서 `DiscountCondition` 인스턴스에게 `isSatisfiedBy` 메시리를 전송해 할인 여부를 판단하도록 요청한다.
+할인 조건에 만족하는 `DiscountCondition` 인스턴스가 존재한다면 할인 요금을 계산하기 위해 `calculateDiscountAmount`를 호출한다.
+만족하는 할인 조건이 존재하지 않을 경우 기본 금액을 반환한다.
+
+```java
+public class Movie {
+
+    private String title;
+    private Duration duration;
+    private Money fee;
+    private List<DiscountCondition> discountConditions;
+    private MovieType movieType;
+    private Money discountAmount;
+    private double discountPercentage;
+
+    public Money calculateMovieFee(Screening screening) {
+        if (isDiscountable(screening)) {
+            return fee.minus(calculateDiscountAmount());
+        }
+
+        return fee;
+    }
+
+    private boolean isDiscountable(Screening screening) {
+        return discountConditions.stream()
+                .allMatch(condition -> condition.isSatisfiedBy(screening));
+    }
+
+    private Money calculateDiscountAmount() {
+        return null;
+    }
+}
+```
+실제 요금을 계산하는 `calculateDiscountAmount` 메서드는 `movieType`의 값에 따라 적절한 메서드를 호출한다.
+```java
+public class Movie {
+    
+    private Money calculateDiscountAmount() {
+        switch (movieType) {
+            case AMOUNT_DISCOUNT:
+                return calculateAmountDiscountAmount();
+            case PERCENT_DISCOUNT:
+                return calculatePercentDiscountAmount();
+            default:
+                return calculateNoneDiscountAmount();
+        }
+    }
+
+    private Money calculateAmountDiscountAmount() {
+        return discountAmount;
+    }
+
+    private Money calculatePercentDiscountAmount() {
+        return fee.times(discountPercentage);
+    }
+
+    private Money calculateNoneDiscountAmount() {
+        return Money.ZERO;
+    }
+}
+```
+
+`Movie`는 `DiscountCondition`에 '할인 여부를 판단하라' 메시지를 전송한다.
+`DiscountCondition`은 이 메시지를 처리하기 위해 `isSatisfiedBy` 메서드를 구현해야 한다.
+
+```java
+public class DiscountCondition {
+    public boolean isSatisfiedBy(Screening screening) {
+        return false;
+    }
+}
+```
+`DiscountCondition`은 기간 조건을 위한 요일(dayOfWeek), 시작 시간(startTime), 종료 시간(endTime)과 순번 조건을 위한 상영 순번(sequence)을 인스턴스 변수로 포함한다.
+추가적인 할인 조건의 종류(type)를 인스턴스 변수로 포함한다.
+`isSatisfiedBy` 메서드는 type 값에 따라 적절한 메서드를 호출한다.
+
+```java
+public class DiscountCondition {
+
+    private DiscountConditionType type;
+    private int sequence;
+    private DayOfWeek dayOfWeek;
+    private LocalTime startTime;
+    private LocalTime endTime;
+    
+    public boolean isSatisfiedBy(Screening screening) {
+        if (type == DiscountConditionType.PERIOD) {
+            return isSatisfiedByPeriod(screening);
+        }
+
+        return isSatisfiedBySequence(screening);
+    }
+
+    private boolean isSatisfiedByPeriod(Screening screening) {
+        return dayOfWeek.equals(screening.getWhenScreened().getDayOfWeek())
+                && !startTime.isAfter(screening.getWhenScreened().toLocalTime())
+                && !endTime.isBefore(screening.getWhenScreened().toLocalTime());
+    }
+
+    private boolean isSatisfiedBySequence(Screening screening) {
+        return sequence == screening.getSequence();
+    }
+}
+```
+
+`DiscountConditionType`은 할인 조건의 종류를 나열한 열거형 타입이다.
+```java
+public enum DiscountConditionType {
+    SEQUENCE,
+    PERIOD,
+}
+```
+구현이 완료됐다. 하지만 몇 가지 문제점이 숨어 있다.
+
+> DiscountCondition 개선하기
+> 타입 분리하기
+> 다형성을 통해 분리하기
+> 변경으로부터 보호하기
+> Movie 개선하기
+> 변경과 유연성
