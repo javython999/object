@@ -1818,8 +1818,160 @@ public enum DiscountConditionType {
 구현이 완료됐다. 하지만 몇 가지 문제점이 숨어 있다.
 
 > DiscountCondition 개선하기
+
+가장 큰 문제점은 변경에 취약한 클래스를 포함하고 있다는 것이다.
+변경에 취약한 클래스란 코드를 수정해야 하는 이유를 하나 이상 가지는 클래스다.
+`DiscountCondition`은 다음과 같은 서로 다른 세 가지 이유로 변경 될 수 있다.
+
+1. 새로운 할인 조건 추가
+   * `isSatisfiedBy` 메서드 안의 `if ~ else` 구문을 수정해야 한다.
+2. 순번 조건을 판단하는 로직 변경
+   * `isSatisfiedBySequence` 메서드의 내부 구현을 수정해야 한다.
+3. 기간 조건을 판단하는 로직 변경
+   * `isSatisfiedByPeriod` 메서드의 내부 구현을 수정해야 한다.
+
+`DiscountCondition`은 하나 이상의 변경 이유를 가지기 때문에 응집도가 낮다.
+응집도가 낮다는 것은 서로 연관성 없는 기능이나 데이터가 하나의 클래스에 뭉쳐져 있다는 것을 의미한다.
+변경의 이유에 따라 클래스를 분리해야 한다.
+
+`isSatisfiedBySequence` 메서드와 `isSatisfiedByPeriod` 메서드는 서로 다른 이유로 변경된다.
+`DiscountCondition`은 서로 다른 이유로, 서로 다른 시점에 변경될 확률이 높다.
+
+설계를 개선하는 작업은 변경의 이유가 하나 이상인 클래스를 찾는 것으로부터 시작하는 것이 좋다.
+변경의 이유가 하나 이상인 클래스에는 위험 징후를 또렷하게 드러내는 몇 가지 패턴이 존재한다는 점이다.
+
+첫 번째 패턴은 <U>인스턴스 변수가 초기화 되는 시점</U>이다.
+응집도가 높은 클래스는 인스턴스를 생성할 때 모든 속성을 함께 초기화 한다.
+응집도가 낮은 클래스는 객체의 속성 중일부만 초기화하고 일부는 초기화 되지 않은 상태로 남겨진다.
+`DiscountConditon`은 순번 조건을 표현하는 경우 sequence는 초기화 되지만 dayOfWeek, startTime, endTime은 초기화 되지 않는다.
+반대로 기간 조건을 표현하는 경우에는 dayOfWeek, startTime, endTime은 초기화 되지만 sequence는 초기화되지 않는다.
+클래스의 속성이 서로 다른 시점에 초기화 되거나 일부만 초기화된다는 것은 응집도가 낮다는 증거다.
+따라서 초기화 속성을 기준으로 코드를 분리해야 한다.
+
+두 번째 패턴은 <U>메서드들이 인스턴스 변수를 사용하는 방식</U>이다.
+모든 메서드가 객체의 모든 속성을 사용한다면 클래스의 응집도는 높다고 볼 수 있다.
+반면 메서드들이 사용하는 속성에 따라 그룹이 나뉜다면 클래스의 응집도가 낮다고 볼 수 있다.
+`DiscountCondition`의 `isSatisfiedBySequence` 메서드와 `isSatisfiedByPeriod` 메서드가 이 경우에 해당한다.
+이 경우 클래스의 응집도를 높이기 위해 속성 그룹과 해당 그룹에 접근하는 메서드 그룹을 기준으로 코드를 분리해야 한다.
+
 > 타입 분리하기
+
+`DiscountConditon`의 가장 큰 문제점은 순번 조건과 기간 조건이라는 두 개의 독립적인 타입이 하나의 클래스 안에 공존하고 있다는 점이다.
+가장 먼저 떠오르는 해결 방법은 두 타입을 `SequenceCondition`과 `PeriodCondition`이라는 두 개의 클래스로 분리하는 것이다.
+
+```java
+public class PeriodCondition {
+
+    private DayOfWeek dayOfWeek;
+    private LocalTime startTime;
+    private LocalTime endTime;
+
+    public PeriodCondition(DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
+        this.dayOfWeek = dayOfWeek;
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    public boolean isSatisfiedBy(Screening screening) {
+        return dayOfWeek.equals(screening.getWhenScreened().getDayOfWeek())
+                && !startTime.isAfter(screening.getWhenScreened().toLocalTime())
+                && !endTime.isBefore(screening.getWhenScreened().toLocalTime());
+    }
+    
+}
+```
+```java
+public class SequenceCondition {
+
+    private int sequence;
+
+    public SequenceCondition(int sequence) {
+        this.sequence = sequence;
+    }
+
+    public boolean isSatisfiedBy(Screening screening) {
+        return sequence == screening.getSequence();
+    }
+}
+```
+클래스를 분리하면서 앞에서 인스턴스 변수 초기화, 메서드들이 인스턴스 변수를 사용하는 방식 문제를 해결했다.
+하지만 클래스를 분리한 후에 새로운 문제가 나타났다.
+`Movie`와 협력하는 클래스는 `DiscountCondition` 하나뿐이다.
+수정 후 `Movie`는 `SequenceCondition`, `PeriodCondition` 클래스들의 인스턴스와 협력할 수 있어야 한다.
+
+문제를 해결 하기 위해 `Movie` 클래스 안에서 `SequenceCondition` 목록과 `PeriodCondition` 목록을 따로 유지하는 것이다.
+하지만 이 방법은 새로운 문제점을 야기한다.
+
+1. `Movie`가 `SequenceCondition`, `PeriodCondition` 양쪽 모두에게 결합된다.
+2. 새로운 할인 조건을 추가되면 또 다른 목록을 `Movie` 안에 만들어야 한다.
+
 > 다형성을 통해 분리하기
+
+`Movie` 입장에서 보면 `SequenceCondition`, `PeriodCondition`은 아무 차이도 없다.
+둘다 할인 여부를 판단하는 동일한 책임을 수행하고 있을 뿐이다.
+할인 가능 여부를 반환해 주기만 하면 `Movie`는 객체가 `SequenceCondition`의 인스턴스인지, `PeriodCondition`의 인스턴스인지는 상관하지 않는다.
+
+이 시점이 되면 자연스럽게 `역할`의 개념이 등장한다.
+역할은 협력 안에서 대체 가능성을 의미하기 때문에 `SequenceCondition`, `PeriodCondition`에 역할의 개념을 적용하면 `Movie`가 구체적인 클래스는 알지 못한 채 오직 역할에 대해서만 결합되도록 의존성을 제한할 수 있다.
+
+```mermaid
+flowchart LR
+    가격을_계산하라 --> movie[Movie] --> 할인_여부를_판단하라 --> discountCondition[SequenceCondition or PeriodCondition]
+```
+역할을 사용하면 객체의 구체적인 타입을 추상화할 수 있다.
+역할을 대체할 클래스들 사이에 구현을 공유해야 할 필요가 있다면 추상 클래스를 사용하면 된다.
+구현을 공유할 필요 없이 역할을 대체하는 객체들의 책임만 정의하고 싶다면 인터페이스를 사용하면 된다.
+
+`SequenceCondition`과 `PeriodCondition`은 구현을 공유할 필요는 없다. 따라서 `DiscountCondition`이라는 인터페이스를 이용해 역할을 구현하자.
+
+```java
+public interface DiscountCondition {
+    boolean isSatisfiedBy(Screening screening);
+}
+```
+
+```java
+public class SequenceCondition implements DiscountCondition{
+
+    private int sequence;
+
+    public SequenceCondition(int sequence) {
+        this.sequence = sequence;
+    }
+
+    @Override
+    public boolean isSatisfiedBy(Screening screening) {
+        return sequence == screening.getSequence();
+    }
+}
+```
+```java
+public class PeriodCondition implements DiscountCondition{
+
+    private DayOfWeek dayOfWeek;
+    private LocalTime startTime;
+    private LocalTime endTime;
+
+    public PeriodCondition(DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
+        this.dayOfWeek = dayOfWeek;
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    @Override
+    public boolean isSatisfiedBy(Screening screening) {
+        return dayOfWeek.equals(screening.getWhenScreened().getDayOfWeek())
+                && !startTime.isAfter(screening.getWhenScreened().toLocalTime())
+                && !endTime.isBefore(screening.getWhenScreened().toLocalTime());
+    }
+}
+```
+이제 `Movie`는 협력하는 객체의 구체적인 타입을 몰라도 상관없다.
+협력하는 객체가 `DiscountCondition` 역할을 수행할 수 있도 `isSatisfiedBy` 메시지를 이해할 수 있다는 사실만 알고 있어도 충분하다.
+`Movie`와 `DiscountConditon` 사이의 협력은 다형적이다.
+객체의 타입에 따라 변하는 행동이 있다면 타입을 분리하고 변화하는 행동을 각 타입의 책임으로 할당하라는 것이다.
+GRASP에서는 이를 POLYMORPHISM(다형성) 패턴이라고 부른다.
+
 > 변경으로부터 보호하기
 > Movie 개선하기
 > 변경과 유연성
