@@ -1973,5 +1973,221 @@ public class PeriodCondition implements DiscountCondition{
 GRASP에서는 이를 POLYMORPHISM(다형성) 패턴이라고 부른다.
 
 > 변경으로부터 보호하기
+
+`DiscountCondition`이라는 역할이 `Movie`로부터 `PeriodCondition`과 `SequenceCondition`의 존재를 감춘다는 사실에 주목하라.
+`DiscountCondition`이라는 추상화가 구체적인 타입을 캡슐화한다.
+`Movie`의 관점에서는 `DiscountCondition`의 타입이 캡슐화된다는 것은 새로운 `DiscountCondition` 타입을 추가하더라도 `Movie`가 영향을 받지 않는다는 것을 의미한다.
+`Movie`에 대한 어떤 수정도 필요 없다.
+`DiscountCondition` 인터페이스를 실체화하는 클래스를 추가하는 것으로 할인 조건의 종류를 확장할 수 있다.
+이처럼 변경을 캡슐화하도록 책임을 할당하는 것을 GRASP에서는 PROTECTED VARIATIONS(변경 보호)패턴이라고 부른다.
+
+하나의 클래스가 여러 타입의 행동을 구현하고 있는 것처럼 보인다면 클래스를 분해하고 POLYMORPHISM 패턴에 따라 책임을 분산 시켜라.
+예측 가능한 변경으로 인해 여러 클래스들이 불안정해진다면 PROTECTED VARIATIONS 패턴에 따라 안정적인 인터페이스 뒤로 변경을 캡슐화하라.
+
 > Movie 개선하기
+
+`Movie` 역시 `DiscountCondition`과 동일한 문제가 있다.
+금액 할인 정책 영화와 비율 할인 정책 영화라는 두 가지 타입을 하나의 클래스 안에 구현하고 있기 때문에 하나 이상의 이유로 변경될 수 있다.
+응집도가 낮은 것이다.
+
+역할의 개념을 도입해서 협력을 다형적으로 만들면된다. POLYMORPHISM 패턴을 사용해 서로 다른 행동을 타입별로 분리하면 다형성의 혜택을 누릴 수 있다.
+
+금액 할인 정책과 관련된 인스턴스 변수와 메서드를 옮길 클래스의 이름으로는 `AmountDiscountMovie`가 적합할 것 같다.
+비율 할인 정책과 관련된 인스턴스 변수와 메서드를 옮길 클래스는 `PercentDiscountMovie`로 명명하자.
+할인 정책을 적용하지 않는 경우는 `NoneDiscountMovie`로 명명하자.
+
+`DiscountCondition`의 경우에는 역할을 수행할 클래스들 사이에 공유할 구현이 없기 때문에 인터페이스를 이용했다.
+`Movie`의 경우 구현을 공유할 필요가 있다. 따라서 추상 클래스를 이용해 역할을 구현한다.
+
+```java
+public abstract class Movie {
+
+    private String title;
+    private Duration duration;
+    private Money fee;
+    private List<DiscountCondition> discountConditions;
+
+    public Movie(String title, Duration duration, Money fee, DiscountCondition ... discountCondition) {
+        this.title = title;
+        this.duration = duration;
+        this.fee = fee;
+        this.discountConditions = List.of(discountCondition);
+    }
+
+    public Money calculateMovieFee(Screening screening) {
+        if (isDiscountable(screening)) {
+            return fee.minus(calculateDiscountAmount());
+        }
+
+        return fee;
+    }
+
+    private boolean isDiscountable(Screening screening) {
+        return discountConditions.stream()
+                .allMatch(condition -> condition.isSatisfiedBy(screening));
+    }
+
+    abstract protected Money calculateDiscountAmount();
+
+    protected Money getFee() {
+        return fee;
+    }
+}
+```
+```java
+public class AmountDiscountMovie extends Movie {
+
+    private Money discountAmount;
+
+    public AmountDiscountMovie(String title, Duration duration, Money fee, Money discountAmount, DiscountCondition... discountCondition) {
+        super(title, duration, fee, discountCondition);
+        this.discountAmount = discountAmount;
+    }
+
+    @Override
+    protected Money calculateDiscountAmount() {
+        return discountAmount;
+    }
+}
+```
+```java
+public class PercentDiscountMovie extends Movie {
+
+    private double percent;
+
+    public PercentDiscountMovie(String title, Duration duration, Money fee, double percent, DiscountCondition... discountCondition) {
+        super(title, duration, fee, discountCondition);
+        this.percent = percent;
+    }
+
+    @Override
+    protected Money calculateDiscountAmount() {
+        return getFee().times(percent);
+    }
+}
+```
+```java
+public class NoneDiscountMovie extends Movie {
+
+    public NoneDiscountMovie(String title, Duration duration, Money fee, DiscountCondition... discountCondition) {
+        super(title, duration, fee, discountCondition);
+    }
+
+    @Override
+    protected Money calculateDiscountAmount() {
+        return Money.ZERO;
+    }
+}
+```
+```mermaid
+classDiagram
+    Screening --> Movie:movie
+    Movie -->"*" DiscountCondition:discountConditions 
+    AmountDiscountMovie --|> Movie
+    PercentDiscountMovie --|> Movie
+    NoneDiscountMovie --|> Movie
+    SequenceCondition ..|> DiscountCondition
+    PeriodCondition ..|> DiscountCondition
+    
+    class Screening {
+        +reserv()
+    }
+    class Movie {
+        +calculateMovieFee()
+        #calculateDiscountAmount()
+    }
+    class AmountDiscountMovie {
+        #calculateDiscountAmount() 
+    }
+    class PercentDiscountMovie {
+        #calculateDiscountAmount()
+    }
+    class NoneDiscountMovie {
+        #calculateDiscountAmount() 
+    }
+    class DiscountCondition {
+        <<interface>>
+        +isSatisfiedBy()
+    }
+    class SequenceCondition {
+        +isSatisfiedBy()
+    }
+    class PeriodCondition {
+        +isSatisfiedBy()
+    }
+```
+결론은 데이터가 아닌 책임을 중심으로 설계하라는 것이다.
+객체에게 중요한 것은 상태가 아니라 행동이다.
+객체지향 설계의 기본은 책임과 협력에 초점을 맞추는 것이다.
+
 > 변경과 유연성
+
+설계를 주도하는 것은 변경이다.
+개발자로서 변경에 대비할 수 있는 두 가지 방법이 있다.
+하나는 코드를 이해하고 수정하기 쉽도록 최대한 단순하게 설계하는 것이다.
+다른 하나는 코드를 수정하지 않고도 변경을 수용할 수 있또록 코드를 더 유연하게 만드는 것이다.
+대부분의 경우에 전자가 더 좋은 방법이지만 유사한 변경이 반복적으로 발생하고 있다면 복잡성이 상승하더라도 유연성을 추가하는 두 번째 방법이 더 좋다.
+
+현재의 설계에서는 할인 정책을 구현하기 위해 상속을 이용하고 있기 때문에 실행 중에 영화의 할인 정책을 변경하기 위해서는
+새로운 인스턴스를 생성한 후 필요한 정보를 복사해야 한다.
+또한 변경 전후의 인스턴스가 개념적으로 동일한 객체를 가리키지만 물리적으로 서로 다른 객체이기 때문에 식별자의 관점에서 혼란스러울 수 있다.
+
+해결 방법은 상속 대신 합성을 사용하는 것이다.
+`Movie`의 상속 계층 안에 구현된 할인 정책을 독립적인 `DiscountPolicy`로 분리한 후 `Movie`에 합성시키면 유연한 설계가 된다.
+
+```mermaid
+classDiagram
+    Screening --> Movie:movie
+    Movie --> DiscountPolicy:discountPolicy
+    DiscountPolicy -->"*" DiscountCondition:discountConditions 
+    AmountDiscountMovie --|> DiscountPolicy
+    PercentDiscountMovie --|> DiscountPolicy
+    NoneDiscountMovie --|> DiscountPolicy
+    SequenceCondition ..|> DiscountCondition
+    PeriodCondition ..|> DiscountCondition
+    
+    class Screening {
+        +reserv()
+    }
+    class Movie {
+        
+    }
+    class DiscountPolicy {
+      +calculateMovieFee()
+      #calculateDiscountAmount()
+    }
+    class AmountDiscountPolicy {
+        #calculateDiscountAmount() 
+    }
+    class PercentDiscountPolicy {
+        #calculateDiscountAmount()
+    }
+    class NoneDiscountPolicy {
+        #calculateDiscountAmount() 
+    }
+    class DiscountCondition {
+        <<interface>>
+        +isSatisfiedBy()
+    }
+    class SequenceCondition {
+        +isSatisfiedBy()
+    }
+    class PeriodCondition {
+        +isSatisfiedBy()
+    }
+```
+
+이제 금액 할인 정책이 적용된 영화를 비율 할인 정책으로 바꾸는 일은 `Movie`에 연결된 `DiscountPolicy`의 인스턴스를 교체하는 단순한 작업으로 바뀐다.
+
+```java
+Movie moive = new Movie(
+        "타이타닉",
+        Duration.ofMinutes(120),
+        Money.wons(10000),
+        new AmountDiscountPolicy(...)
+);
+
+movie.changeDiscountPolicy(new PercentDiscountPolicy(...));
+```
+유연성은 의존성 관리의 문제다. 요소들 사이의 의존성의 정도가 유연성의 정도를 결정한다.
+유연성의 정도에 따라 결합도를 조절할 수 있는 능력은 객체지향 개발자가 갖춰야 하는 중요한 기술 중 하나다.

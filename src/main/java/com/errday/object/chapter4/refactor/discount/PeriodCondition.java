@@ -1,4 +1,6 @@
-package com.errday.object.chapter4.refactor;
+package com.errday.object.chapter4.refactor.discount;
+
+import com.errday.object.chapter4.refactor.Screening;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
