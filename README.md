@@ -2191,3 +2191,236 @@ movie.changeDiscountPolicy(new PercentDiscountPolicy(...));
 ```
 유연성은 의존성 관리의 문제다. 요소들 사이의 의존성의 정도가 유연성의 정도를 결정한다.
 유연성의 정도에 따라 결합도를 조절할 수 있는 능력은 객체지향 개발자가 갖춰야 하는 중요한 기술 중 하나다.
+
+## 04 책임 주도 설계의 대안
+책임 주도 설계에 익숙해지기 위해서는 부단한 노력과 시간이 필요하다.
+설계를 진행하는 동안 데이터가 아닌 책임 관점에서 사고하기 위해서는 충분한 경험과 학습이 필요하다.
+
+책임과 객체 사이에서 방황할 때 돌파구를 찾기 위해 선택하는 방법은 최대한 빠르게 목적한 기능을 수행하는 코드를 작성하는 것이다.
+아무것도 없는 상태에서 책임과 협력에 관해 고민하기 보다는 일단 실행되는 코드를 작성하는 것이다.
+일단 실행되는 코드를 얻고 난 후에 코드 상에 명확하게 드러나는 책임들을 올바른 위치로 이동시키는 것이다.
+
+주의할 점은 코드를 수정한 후에 겉으로 드러나는 동작이 바뀌어서는 안된다는 것이다.
+이처럼 이해하기 쉽고 수정하기 쉬운 소프트웨어로 개선하기 위해 겉으로 보이는 동작은 바꾸지 않은 채
+내부 구조를 변경하는 것을 리팩터링이라고 부른다.
+
+> 메서드 응집도
+
+데이터 중심으로 설계된 영화 예매 시스템에서 도메인 객체들은 단지 데이터의 집합일 뿐이며 영화 예매를 처리하는 모든 절차는 `ReservationAgency`에 집중돼 있었다.
+따라서 `ReservationAgency`에 포함된 로직들을 적절한 객체의 책임으로 분배하면 책임 주도 설계와 거의 유사한 결과를 얻을 수 있다.
+
+```java
+public class ReservationAgency {
+
+    public Reservation reservation(Screening screening, Customer customer, int audienceCount) {
+
+        Movie movie = screening.getMovie();
+
+        boolean discountable = false;
+        for (DiscountCondition condition : movie.getDiscountConditionList()) {
+            if (condition.getDiscountType() == DiscountType.PEROID) {
+                discountable = screening.getWhenScreened().getDayOfWeek().equals(condition.getDayOfWeek())
+                        && condition.getStartTime().compareTo(screening.getWhenScreened().toLocalTime()) <= 0
+                        && condition.getEndTime().compareTo(screening.getWhenScreened().toLocalTime()) >= 0;
+            } else {
+                discountable = condition.getSequence() == screening.getSequence();
+            }
+
+            if (discountable) {
+                break;
+            }
+        }
+
+        Money fee;
+        if (discountable) {
+            Money discountAmount = Money.ZERO;
+            switch (movie.getMovieType()) {
+                case AMOUNT_DISCOUNT -> discountAmount = movie.getDiscountAmount();
+                case PERCENT_DISCOUNT -> discountAmount = movie.getFee().times(movie.getDiscountPercentage());
+                case NONE_DISCOUNT -> discountAmount = Money.ZERO;
+            }
+
+            fee = movie.getFee().minus(discountAmount);
+        } else {
+            fee = movie.getFee();
+        }
+
+        return new Reservation(customer, screening, fee, audienceCount);
+    }
+}
+```
+
+`ReservationAgency`의 `reserve` 메서드는 길이가 너무 길고 이해하기도 어렵다.
+긴 메서드는 다양한 측면에서 코드의 유지 보수에 부정적인 영향을 미친다.
+
+* 어떤 일을 수행하는지 한눈에 파악하기 어렵기 때문에 코드를 전체적으로 이해하는 데 너무 많은 시간이 걸린다.
+* 하나의 메서드 안에서 너무 많은 작업을 처리하기 때문에 변경이 필요할 때 수정해야할 부분을 찾기 어렵다.
+* 메서드 내부의 일부 로직만 수정하더라도 메서드의 나머지 부분에서 버그가 발생할 확률이 높다.
+* 로직의 일부만 재사용하는 것이 불가능하다.
+* 코드를 재사용하는 유일한 방법은 원하는 코드를 복사해서 붙여넣는 것뿐이므로 코드 중복을 초래하기 쉽다.
+
+긴 메서드는 응집도가 낮기 때문에 이해하기 어렵고 재사용하기 어려우며 변경하기도 어렵다.
+마이클 페더스는 이런 메서드를 `몬스터 메서드(monster method)`라고 부른다.
+
+응집도가 낮은 메서드는 로직의 흐름을 이해하기 위해 주석이 필요한 경우가 대부분이다.
+주석을 추가하는 대신 메서드를 작게 분해해서 각 메서드의 응집도를 높여라.
+작은 메서드들로 조합된 메서드는 마치 주석들을 나열한 것처럼 보이기 때문에 코드를 이해하기도 쉽다.
+
+```java
+public class ReservationAgencyRefactor {
+
+    public Reservation reservation(Screening screening, Customer customer, int audienceCount) {
+        boolean discountable = checkDiscountable(screening);
+        Money fee = calculateFee(screening, discountable, audienceCount);
+        return createReservation(screening, customer, audienceCount, fee);
+    }
+
+    private boolean checkDiscountable(Screening screening) {
+        return screening.getMovie()
+                .getDiscountConditions()
+                .stream()
+                .anyMatch(condition -> isDiscountable(condition, screening));
+    }
+
+    private boolean isDiscountable(DiscountCondition condition, Screening screening) {
+        if (condition.getType() == DiscountConditionType.PERIOD) {
+            return isSatisfiedByPeriod(condition, screening);
+        }
+
+        return isSatisfiedBySequence(condition, screening);
+    }
+
+    private boolean isSatisfiedByPeriod(DiscountCondition condition, Screening screening) {
+        return screening.getWhenScreened().getDayOfWeek().equals(condition.getDayOfWeek())
+                && !condition.getStartTime().isAfter(screening.getWhenScreened().toLocalTime())
+                && !condition.getEndTime().isBefore(screening.getWhenScreened().toLocalTime());
+    }
+
+    private boolean isSatisfiedBySequence(DiscountCondition condition, Screening screening) {
+        return screening.getSequence() == condition.getSequence();
+    }
+
+
+    private Money calculateFee(Screening screening, boolean discountable, int audienceCount) {
+        if (discountable) {
+            return screening.getMovie()
+                    .getFee()
+                    .minus(calculateDiscountedFee(screening.getMovie()))
+                    .times(audienceCount);
+        }
+        return screening.getMovie().getFee().times(audienceCount);
+    }
+
+    private Money calculateDiscountedFee(Movie movie) {
+        switch (movie.getMovieType()) {
+            case AMOUNT_DISCOUNT:
+                return calculateAmountDiscountedFee(movie);
+            case PERCENT_DISCOUNT:
+                return calculatePercentDiscountedFee(movie);
+            case NONE_DISCOUNT:
+                return calculateNoneDiscountedFee(movie);
+        }
+        throw new IllegalArgumentException("Invalid movie type");
+    }
+
+    private Money calculateAmountDiscountedFee(Movie movie) {
+        return movie.getDiscountAmount();
+    }
+
+    private Money calculatePercentDiscountedFee(Movie movie) {
+        return movie.getFee().times(movie.getDiscountPercentage());
+    }
+
+    private Money calculateNoneDiscountedFee(Movie movie) {
+        return Money.ZERO;
+    }
+
+    private Reservation createReservation(Screening screening, Customer customer, int audienceCount, Money fee) {
+        return new Reservation(customer, screening, fee, audienceCount);
+    }
+}
+```
+비록 클래스의 길이는 더 길어졌지만 일반적으로 명확성의 가치가 클래스의 길이보다 더 중요하다.
+코드를 작은 메서드들로 분해하면 전체적인 흐름을 이해하기도 쉬워진다.
+동시에 너무 많은 세부사항을 기억하도록 강요하는 코드는 이해하기도 어렵다.
+큰 메서드를 작은 메서드들로 나누면 한 번에 기억해야 하는 정보를 줄일 수 있다.
+더 세부적인 정보가 필요하면 그때 각 메서드의 세부적인 구현을 확인하면 되기 때문이다.
+
+> 객체를 자율적으로 만들자
+
+자신이 소유하고 있는 데이터를 자기 스스로 처리하도록 만드는 것이 자율적인 객체를 만드는 지름길이다.
+메서드가 사용하는 데이터를 저장하고 있는 클래스로 메서드를 이동시키면 된다.
+어떤 데이터를 사용하는지 가장 쉽게 알 수 있는 방법은 메서드 안에서 어떤 클래스의 접근자 메서드를 사용하는지 파악하는 것이다.
+
+```java
+public class ReservationAgency {
+    private boolean isDiscountable(DiscountCondition condition, Screening screening) {
+        if (condition.getType() == DiscountConditionType.PERIOD) {
+          return isSatisfiedByPeriod(condition, screening);
+        }
+      
+        return isSatisfiedBySequence(condition, screening);
+    }
+    
+    private boolean isSatisfiedByPeriod(DiscountCondition condition, Screening screening) {
+        return screening.getWhenScreened().getDayOfWeek().equals(condition.getDayOfWeek())
+                && !condition.getStartTime().isAfter(screening.getWhenScreened().toLocalTime())
+                && !condition.getEndTime().isBefore(screening.getWhenScreened().toLocalTime());
+    }
+    
+    private boolean isSatisfiedBySequence(DiscountCondition condition, Screening screening) {
+        return screening.getSequence() == condition.getSequence();
+    }
+}
+```
+`ReservationAgency`의 `isDiscountable`는 `DiscountCondtion`의 `getType` 메서드를 호출해서 할인 조건의 타입을 알아낸 후 타입에 따라 
+`isSatisfiedByPeriod`나 `isSatisfiedBySequence`를 호출한다.
+`isSatisfiedByPeriod`와 `isSatisfiedBySequence`의 내부 구현 역시 할인 여부를 판단하기 위해 `DiscountCondtion`의 접근자 메서드를 이용해 데이터를 가져온다.
+두 메서드를 데이터가 존재하는 `DiscountCondition`으로 이동하자.
+
+```java
+public class DiscountCondition {
+
+    private DiscountConditionType type;
+    private int sequence;
+    private DayOfWeek dayOfWeek;
+    private LocalTime startTime;
+    private LocalTime endTime;
+
+    public boolean isDiscountable(Screening screening) {
+        if (type == DiscountConditionType.PERIOD) {
+            return isSatisfiedByPeriod(screening);
+        }
+
+        return isSatisfiedBySequence(screening);
+    }
+    
+    public boolean isSatisfiedBy(Screening screening) {
+        if (type == DiscountConditionType.PERIOD) {
+            return isSatisfiedByPeriod(screening);
+        }
+
+        return isSatisfiedBySequence(screening);
+    }
+
+    private boolean isSatisfiedByPeriod(Screening screening) {
+        return dayOfWeek.equals(screening.getWhenScreened().getDayOfWeek())
+                && !startTime.isAfter(screening.getWhenScreened().toLocalTime())
+                && !endTime.isBefore(screening.getWhenScreened().toLocalTime());
+    }
+
+    private boolean isSatisfiedBySequence(Screening screening) {
+        return sequence == screening.getSequence();
+    }
+}
+```
+`DiscountCondition`의 `isDiscountable` 메서드는 외부에서 호출 가능해야 하므로 `private`에서 `public`으로 변경했다.
+기존 `isDiscountable` 메서드는 `DiscountCondition`의 인스턴스를 인자로 받아야 했지만 이제 `DiscountCondition`의 일부가 됐기 때문에
+인자로 전달 받을 필요가 없어졌다.
+이처럼 메서드를 다른 클래스로 이동시킬 때는 인자에 정의된 클래스 중 하나로 이동하는 경우가 일반적이다.
+
+이제 `DiscountConditoin` 내부에서만 `DiscountCondition` 인스턴스 변수에 접근한다.
+따라서 모든 접근자 메서드를 제거할 수 있다.
+이를 통해 내부 구현을 캡슐화 할 수 있다.
+할인 조건을 계산하는 데 필요한 모든 로직이 `DiscountCondition`에 모여있기 때문에 응집도 역시 높아졌다.
+

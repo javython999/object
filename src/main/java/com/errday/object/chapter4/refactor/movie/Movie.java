@@ -3,6 +3,7 @@ package com.errday.object.chapter4.refactor.movie;
 import com.errday.object.chapter4.refactor.discount.DiscountCondition;
 import com.errday.object.chapter4.refactor.Money;
 import com.errday.object.chapter4.refactor.Screening;
+import lombok.Getter;
 
 import java.time.Duration;
 import java.util.List;
@@ -12,6 +13,7 @@ public abstract class Movie {
     private String title;
     private Duration duration;
     private Money fee;
+    @Getter
     private List<DiscountCondition> discountConditions;
 
     public Movie(String title, Duration duration, Money fee, DiscountCondition ... discountCondition) {
