@@ -2474,5 +2474,177 @@ public class DiscountCondition {
 메서드는 이 시그니처에 구현을 더한 것이다.
 
 ## 02 인터페이스와 설계 품질
+> 디미터 법칙
+
+```java
+public class ReservationAgency {
+
+    public Reservation reservation(Screening screening, Customer customer, int audienceCount) {
+
+        Movie movie = screening.getMovie();
+
+        boolean discountable = false;
+        for (DiscountCondition condition : movie.getDiscountConditionList()) {
+            if (condition.getDiscountType() == DiscountType.PEROID) {
+                discountable = screening.getWhenScreened().getDayOfWeek().equals(condition.getDayOfWeek())
+                        && condition.getStartTime().compareTo(screening.getWhenScreened().toLocalTime()) <= 0
+                        && condition.getEndTime().compareTo(screening.getWhenScreened().toLocalTime()) >= 0;
+            } else {
+                discountable = condition.getSequence() == screening.getSequence();
+            }
+
+            if (discountable) {
+                break;
+            }
+        }
+        
+      ...
+    }
+}
+```
+절차적인 방식의 영화 예매 시스템 코드중 할인 가능 여부를 체크하는 코드이다.
+`ReservationAgency`와 인자로 전달된 `Screening` 사이의 결합도가 너무 높기 때문에
+`Screening`의 내부 구현을 변경할 때마다 `ReservationAgency`도 함께 변경된다는 것이다.
+문제의 원인은 `ReservationAgency`가 `Screening`뿐만 아니라 `Moive`와 `DiscountCondition`에도 직접 접근하기 때문이다.
+
+```mermaid
+classDiagram
+  direction LR
+  ReservationAgency ..> Reservation
+  ReservationAgency ..> Screening
+  ReservationAgency ..> Movie
+  ReservationAgency ..> DiscountCondition
+  Reservation -->"customer" Customer
+  Reservation -->"screening" Screening
+  Screening -->"movie" Movie
+  Movie -->"*" DiscountCondition
+  
+  class ReservationAgency {
+      reserve()
+  }
+  class Reservation {
+      fee
+      audienceCount
+  }
+  class Customer {
+      
+  }
+  class Screening {
+      sequence
+      whenScreened
+  }
+  class Movie {
+      title
+      runningTime
+      fee
+      movieType
+      discountAmount
+      discountPercent
+  }
+  class DiscountCondition {
+    type
+    sequence
+    dayOfWeek
+    startTime
+    endTime
+  }
+```
+* `Screening`이 `Movie`를 포함하지 않도록 변경되거나
+* `Movie`가 `DiscountCondition`을 포함하지 않아도 되도록 변경되거나
+* `DiscountCondition` 내부에 sequence를 포함하지 않게 된거나
+* sequence가 int가 아니라 `Sequence`라는 클래스로 변경된거나
+
+`ReservationAgency`는 사소한 변경에도 흔들리는 의존성의 집결지다.
+이처럼 협력하는 객체의 내부 구조에 대한 결합으로 인해 발생하는 설계 문제를 해결하기 위해 제안된 원칙이 바로 `디미터 법칙`이다.   
+디미터 법칙을 간단하게 요약하면 '객체의 내부 구조에 강하게 결합되지 않도록 협력 경로를 제한하라'이다.
+
+* 낯선 자에게 말하지 말라
+* 오직 인접한 이웃하고만 말하라
+* 오직 하나의 도트(.)만 사용하라
+
+내부의 메서드가 아래 조건을 만족하는 인스턴스에만 메시지를 전송하도록 프로그래밍해야 한다고 이해해도 무방하다.
+* this 객체
+* 메서드의 매개변수
+* this의 속성
+* this의 속성인 컬렉션의 요소
+* 메서드 내에서 생성된 지역 객체
+
+```java
+public class ReservationAgency {
+
+    public Reservation reservation(Screening screening, Customer customer, int audienceCount) {
+        Money fee = screening.calculateFee(audienceCount);
+        return new Reservation(customer, screening, fee, audienceCount);
+    }
+}
+```
+결합도 문제를 해결한 `ReservationAgency` 코드이다.
+메서드의 인자로 전달된 `Screening` 인스턴스에게만 메시지를 전송한다.
+`ReservationAgency`는 `Screening` 내부에 대한 어떤 정보도 알지 못한다.
+`ReservationAgency`가 `Screening`의 내부 구조에 결합돼 있지 않기 때문에 `Screening`의 내부 구현을 변경할 때 `ReservationAgency`를 함께 변경할 필요가 없다.
+
+```mermaid
+classDiagram
+  direction LR
+  ReservationAgency ..> Reservation
+  ReservationAgency ..> Screening
+  Reservation -->"customer" Customer
+  Reservation -->"screening" Screening
+  Screening -->"movie" Movie
+  Movie -->"*" DiscountCondition
+  
+  class ReservationAgency {
+      reserve()
+  }
+  class Reservation {
+      fee
+      audienceCount
+  }
+  class Customer {
+      
+  }
+  class Screening {
+      sequence
+      whenScreened
+  }
+  class Movie {
+      title
+      runningTime
+      fee
+      movieType
+      discountAmount
+      discountPercent
+  }
+  class DiscountCondition {
+    type
+    sequence
+    dayOfWeek
+    startTime
+    endTime
+  }
+```
+
+다음은 디미터 법칙을 위반하는 전형적인 모습의 코드이다.
+메시지 전송자가 수신자의 내부 구조에 대해 물어보고 반환받은 요소에 대해 연쇄적으로 메시지를 전송한다.
+이와 같은 코드를 `기차 충돌(train wreck)`이라고 부르는데 여러 대의 기차가 한줄로 늘어서 충돌한 것처럼 보이기 때문이다.
+메시지 전송자는 메시지 소수신자의 내부 정보를 자세히 알게 된다.
+따라서 메시지 수신자의 캡슐화는 무너지고 메시지 전송자가 메시지 수신자의 내부 구현에 강하게 결합된다.
+
+디미터 법칙을 따르도록 코드를 개선하면 메시지 전송자는 더 이상 메시지 수신자의 내부 구조에 관해 묻지 않게 된다.
+단지 자신이 원하는 것이 무엇인지 명시하고 단순히 수행하도록 요청한다.
+```java
+screening.getMovie().getDiscountConditions();
+```
+
+> 묻지 말고 시켜라
+
+
+
+> 의도를 드러내는 인터페이스
+> 함께 모으기
+
+
+
+
 ## 03 원칙의 함정
 ## 04 명령-쿼리 분리 원칙
