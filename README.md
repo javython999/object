@@ -1,4 +1,4 @@
-**![Image](https://github.com/user-attachments/assets/d4533df2-425b-46c3-ba47-61874e72b5fb)
+![Image](https://github.com/user-attachments/assets/d4533df2-425b-46c3-ba47-61874e72b5fb)
 # 00. 들어가며
 ## 01 패러다임의 시대
 과학혁명이란 과거의 패러다임이 새로운 패러다임에 의해 대체됨으로써 정상과학의 방향과 성격이 변하는 것을 의미한다. 
@@ -7,8 +7,6 @@
 ## 02 프로그래밍 패러다임
 프로그래밍 패러다임은 과거의 패러다임을 폐기시키는 혁명적인 과정을 거치지 않는 것으로 보인다.
 오히려 과거에 있던 패러다임의 단점을 보완하는 발전적인 과정을 거치는 것으로 보인다. 프로그래밍 패러다임은 혁명적(revolutionary)이 아니라 발전적(evolutionary)이다.
-
-***
 
 # 01. 객체, 설계
 ## 01 티켓 판매 애플리케이션 구현하기
@@ -2624,24 +2622,72 @@ classDiagram
   }
 ```
 
-다음은 디미터 법칙을 위반하는 전형적인 모습의 코드이다.
-메시지 전송자가 수신자의 내부 구조에 대해 물어보고 반환받은 요소에 대해 연쇄적으로 메시지를 전송한다.
-이와 같은 코드를 `기차 충돌(train wreck)`이라고 부르는데 여러 대의 기차가 한줄로 늘어서 충돌한 것처럼 보이기 때문이다.
-메시지 전송자는 메시지 소수신자의 내부 정보를 자세히 알게 된다.
-따라서 메시지 수신자의 캡슐화는 무너지고 메시지 전송자가 메시지 수신자의 내부 구현에 강하게 결합된다.
+다음은 디미터 법칙을 위반하는 전형적인 모습의 코드이다. 
 
-디미터 법칙을 따르도록 코드를 개선하면 메시지 전송자는 더 이상 메시지 수신자의 내부 구조에 관해 묻지 않게 된다.
-단지 자신이 원하는 것이 무엇인지 명시하고 단순히 수행하도록 요청한다.
 ```java
 screening.getMovie().getDiscountConditions();
 ```
 
+메시지 전송자가 수신자의 내부 구조에 대해 물어보고 반환받은 요소에 대해 연쇄적으로 메시지를 전송한다.   
+이와 같은 코드를 `기차 충돌(train wreck)`이라고 부르는데 여러 대의 기차가 한줄로 늘어서 충돌한 것처럼 보이기 때문이다.   
+메시지 전송자는 메시지 소수신자의 내부 정보를 자세히 알게 된다.    
+따라서 메시지 수신자의 캡슐화는 무너지고 메시지 전송자가 메시지 수신자의 내부 구현에 강하게 결합된다.    
+
+디미터 법칙을 따르도록 코드를 개선하면 메시지 전송자는 더 이상 메시지 수신자의 내부 구조에 관해 묻지 않게 된다.
+단지 자신이 원하는 것이 무엇인지 명시하고 단순히 수행하도록 요청한다.
+
+```java
+screening.calculateFee(audienceCount);
+```
+
 > 묻지 말고 시켜라
 
-
+절차적인 코드는 정보를 얻은 후에 결정한다.
+객체지향 코드는 객체에게 그것을 하도록 시킨다.
+객체의 정보를 이용하는 행동을 객체의 외부가 아닌 내부에 위치시키기 때문에 자연스럽게 정보와 행동을 동일한 클래스 안에 두게 된다.
+내부의 상태를 묻는 오퍼레이션을 인터페이스에 포함시키고 있다면 더 나은 방법은 없는지 고민해보라.
+내부의 상태를 이용해 어떤 결정을 내리는 로직이 객체 외부에 존재하는가? 그렇다면 해당 객체가 책임져야 하는 어떤 행동이 외부로 누수된 것이다.
 
 > 의도를 드러내는 인터페이스
+
+메서드를 명명하는 두 가지 방법
+
+1. '어떻게' 수행하는지를 나타내도록 이름 짓기
+2. '무엇'을 하는지를 나타내도록 이름 짓기
+
+#### '어떻게' 수행하는지 나타내는 메서드
+```java
+public class PeriodCondition {
+    public boolean isSatisfiedByPeriod(Screening screening) {...}
+}
+
+public class SequenceCondition {
+  public boolean isSatisfiedBySequence(Screening screening) {...}
+}
+```
+* 클라이언트 관점에서 `isSatisfiedByPeriod`, `isSatisfiedBySequence` 모두 할인 조건을 판단하는 동일한 작업을 수행한다. 하지만 메서드 이름이 다르기 때문에 두 메서드가 동일한 작업을 수행한다는 사실을 알아채기 어렵다.
+* 캡슐화를 위반한다. 클라이언트로 하여금 객체의 종류를 알게 한다. 
+`PeriodCondition`의 인스턴스인 경우 `isSatisfiedByPeriod` 메서드를 호출하고 `SequenceCondition`의 인스턴스인 경우 `isSatisfiedBySequence`를 호출하기 때문에 인스턴스의 종류가 변경되면 호출하는 메서드도 같이 변경이 되어야 한다.
+
+#### '무엇'을 하는지 나타내는 메서드
+```java
+public interface DiscountCondition {
+    boolean isSatisfiedBy(Screening screening);
+}
+
+public class PeriodCondition implements DiscountCondition {
+    public boolean isSatisfiedBy(Screening screening) {...}
+}
+
+public class SequenceCondition implements DiscountCondition {
+  public boolean isSatisfiedBy(Screening screening) {...}
+}
+```
+* `isSatisfiedBy`로 동일한 목적을 가진다는 것을 명확하게 표현한다.
+* `PeriodCondition`와 `SequenceCondition`을 동일한 타입으로 선언하기 위해 `DiscountCondition` 인터페이스를 실체화하게 한다. 클라이언트 입장에서 두 메서드를 동일한 방식으로 사용할 수 있게 된다.
+
 > 함께 모으기
+
 
 
 
