@@ -2688,9 +2688,394 @@ public class SequenceCondition implements DiscountCondition {
 
 > 함께 모으기
 
+```java
+public class Theater {
 
+    private TicketSeller ticketSeller;
 
+    public Theater(TicketSeller ticketSeller) {
+        this.ticketSeller = ticketSeller;
+    }
 
+    public void enter(Audience audience) {
+        if (audience.getBag().hasInvitation()) {
+            audience.getBag().setTicket(ticketSeller.getTicketOffice().getTicket());
+        } else {
+            Ticket ticket = ticketSeller.getTicketOffice().getTicket();
+            audience.getBag().minusAmount(ticket.getFee());
+            ticketSeller.getTicketOffice().plusAmount(ticket.getFee());
+            audience.getBag().setTicket(ticket);
+        }
+    }
+}
+```
+`Theater`의 `enter` 메서드는 디미터 법칙을 위반한 코드의 전형적인 모습을 보여준다.
+`Theater`가 인자로 전달된 `audience`와 인스턴스 변수인 `ticketSeller`에 메시지를 전송하는 것은 문제가 없다.
+문제는 `Theater`가 `audience`와 `ticketSeller` 내부에 포함된 객체에게도 직접 접근한다는 것이다.
 
+```java
+audience.getBag().setTicket(ticket);
+```
+`enter` 메서드에서 발췌한 이 코드는 디미터 법칙을 위반할 때 나타나는 기차 충돌 스타일의 전형적인 모습을 보여준다.
+`Theater`는 `Audience`뿐만 아니라 `Audience` 내부의 `Bag`에도 메시지를 전송한다.
+결과적으로 `Theater`는 `Audience`의 퍼블릭 인터페이스뿐만 아니라 내부 구조에 대해서도 결합된다.
+
+근본적으로 디미터 법칙을 위반하는 설계는 '인터페이스와 구현의 분리 원칙'을 위반한다.
+`Audience`가 `Bag`을 포함한다는 사실은 `Audience`의 내부 구현에 속하며 `Audience`는 자신의 내부 구현을 자유롭게 변경할 수 있엉 ㅑ한다.
+그러나 퍼블릭 인터페이스에 `getBag()`을 포함시키는 순간 객체의 구현이 퍼블릭 인터페이스를 통해 외부에 새어나가 버리고 만다.
+따라서 디미터 법칙을 위반한다는 것은 클라이언트에게 구현을 노출한다는 것을 의미하며,
+그 결과 작은 요구사항 변경에도 쉽게 무너지는 불안정한 코드를 얻게 된다.
+
+디미터 법칙을 위반한 코드는 사용하기도 어렵다.
+클라이언트 객체의 개발자는 `Audience`의 퍼블릭 인터페이스뿐만 아니라 내부 구조까지 속속들이 알고 있어야 하기 때문이다.
+
+#### 묻지 말고 시켜라
+`Theater`는 `TicketSeller`와 `Audience`의 내부 구조에 관해 묻지 말고 원하는 작업을 시켜야 한다.
+묻지 말고 시켜라 스타일을 따르는 퍼블릭 인터페이스를 가져야 한다.
+
+```java
+public class Theater {
+
+    private TicketSeller ticketSeller;
+
+    public Theater(TicketSeller ticketSeller) {
+        this.ticketSeller = ticketSeller;
+    }
+
+    public void enter(Audience audience) {
+        ticketSeller.setTicket(audience);
+    }
+}
+```
+`Theater`는 자신의 자신의 속성으로 포함하고 있는 `TicketSeller`의 인스턴스에만 메시지를 전송하게 됐다.
+```java
+public class TicketSeller {
+
+    private final TicketOffice ticketOffice;
+
+    public TicketSeller(TicketOffice ticketOffice) {
+        this.ticketOffice = ticketOffice;
+    }
+
+    public void setTicket(Audience audience) {
+        if (audience.getBag().hasInvitation()) {
+            audience.getBag().setTicket(ticketOffice.getTicket());
+        } else {
+            Ticket ticket = ticketOffice.getTicket();
+            audience.getBag().minusAmount(ticket.getFee());
+            ticketOffice.plusAmount(ticket.getFee());
+            audience.getBag().setTicket(ticket);
+        }
+    }
+}
+```
+`TicketSeller`가 원하는 것은 `Audience`가 `Ticket`을 보유하도록 하는 것이다.
+따라서 `Audience`에게 `setTicket` 메서드를 추가하고 스스로 티켓을 가지도록 만들자.
+```java
+public class Audience {
+
+    private Bag bag;
+
+    public Audience(Bag bag) {
+        this.bag = bag;
+    }
+
+    public Long setTicket(Ticket ticket) {
+        if (bag.hasInvitation()) {
+            bag.setTicket(ticket);
+            return 0L;
+        } else {
+            bag.setTicket(ticket);
+            bag.minusAmount(ticket.getFee());
+            return ticket.getFee();
+        }
+    }
+}
+```
+```java
+public class TicketSeller {
+
+    private final TicketOffice ticketOffice;
+
+    public TicketSeller(TicketOffice ticketOffice) {
+        this.ticketOffice = ticketOffice;
+    }
+
+    public void setTicket(Audience audience) {
+        ticketOffice.plusAmount(audience.setTicket(ticketOffice.getTicket()));
+    }
+}
+```
+`Audience`의 `setTicket` 메서드를 살펴보면 `Bag`에게 원하는 일을 시키기 전에
+`hasInvitation` 메서드를 이용해 초대권을 가지고 있는지 묻는다.
+따라서 `Audience`는 디미터 법칙을 위반한다.
+`Audience`의 `setTicket` 메서드 구현을 `Bag`의 `setTicket`으로 이동시키자.
+
+```java
+public class Bag {
+    public Long setTicket(Ticket ticket) {
+        if (hasInvitation()) {
+          this.ticket = ticket;
+          return 0L;
+        } else {
+          this.ticket = ticket;
+          minusAmount(ticket.getFee());
+          return ticket.getFee();
+        }
+    }
+    
+    private void minusAmount(Long amount) {
+      this.amount -= amount;
+    }
+
+    private boolean hasInvitation() {
+      return invitation != null;
+    }
+}
+```
+```java
+public class Audience {
+
+    private Bag bag;
+
+    public Audience(Bag bag) {
+        this.bag = bag;
+    }
+
+    public Long setTicket(Ticket ticket) {
+        return bag.setTicket(ticket);
+    }
+}
+```
+디미터 법칙과 묻지 말고 시켜라 스타일을 따르면 자연스럽게 자율적인 객체로 구성된 유연한 협력을 얻게 된다.
+구현이 객체의 퍼블릭 인터페이스에 노출되지 않기 때문에 객체 사이의 결합도는 낮아진다.
+책임이 잘못된 곳에 할당될 가능성이 낮아지기 때문에 객체의 응집도 역시 높아진다.
+
+#### 인터페이스에 의도를 드러내자
+
+```java
+public class TicketSeller {
+    public void setTicket(Audience audience) {...}
+}
+
+public class Audience {
+    public Long setTicket(Ticket ticket) {...}
+}
+
+public class Bag {
+    public Long setTicket(Ticket ticket) {...}
+}
+```
+`TicketSeller`, `Audience`, `Bag`의 `setTicket`은 같은 이름이지만 다른 의도를 가지고 있다.
+메서드를 직접 개발한 개발자는 이 사실을 알지만 퍼블릭 인터페이스를 해석하고 사용해야하는 개발자는 차이점을 명확하게 이해할 수 없다.
+
+`Theater`의 의도는 `Audience`에게 티켓을 판매하는 것이다.
+`Audience`의 의도는 `Bag`에게 티켓을 보관하게 하도록 하는 것이다.
+의도가 드러나도록 각 객체의 퍼블릭 인터페이스를 수정해보자.
+
+```java
+public class TicketSeller {
+    public void sellTo(Audience audience) {...}
+}
+
+public class Audience {
+    public Long buy(Ticket ticket) {...}
+}
+
+public class Bag {
+    public Long hold(Ticket ticket) {...}
+}
+```
 ## 03 원칙의 함정
+디미터 법칙과 묻지 말고 시켜라 스타일은 객체의 퍼블릭 인터페이스를 깔끔하고 유연하게 만들 수 있는 훌륭한 설계 원칙이다.
+하지만 절대적인 법칙은 아니다.
+원칙을 아는 것보다 더 중요한 것은 언제 원칙이 유용하고 언제 유용하지 않은지를 판단할 수 있는 능력을 기르는 것이다.
+
+> 디미터 법칙은 하나의 도트(.)를 강제하는 규칙이 아니다.
+
+```java
+IntStream.of(1, 15 ,20 ,3, 9).filter(x -> x > 10).distinct().count();
+```
+위 코드에서 `of`, `filter`, `distict` 메서드는 모두 IntStream이라는 동일한 클래스의 인스턴스를 반환한다.
+즉 이들은 IntStream의 인스턴스를 또 다른 IntStream의 인스턴스로 변환한다.
+따라서 이 코드는 디미터 법칙을 위반하지 않는다.
+IntStream의 내부 구조가 외부로 노출됐는가? 그렇지 않다.
+기차 충돌 처럼 보이는 코드라도 객채의 내부 구현에 대한 어떤 정보도 외부로 노출하지 않는다면 그것은 디미터 법칙을 준수한 것이다.
+
+여러분이 이런 종류의 코드와 마주쳐야 하는 위기의 순간이 온다면 스스로에게 다음과 같은 질문을 하기 바란다.
+'과연 여러 개의 도트를 사용한 코드가 객체의 내부 구조를 노출하고 있는가?'
+
+> 결합도와 응집도의 충돌
+
+안타깝게도 묻지 말고 시켜라와 디미터 법칙을 준수하는 것이 항상 긍정적인 결과로만 귀결되는 것은 아니다.
+모든 상황에서 맹목적으로 위임 메서드를 추가하면 같은 퍼블릭 인터페이스 안에 어울리지 않는 오퍼레이션들이 공존하게 된다.
+결과적으로 상관 없는 책임들을 한꺼번에 떠안게 되기 때문에 결과적으로 응집도가 낮아진다.
+
+로버트 마틴은 디미터 법칙의 위변 여부는 묻는 대상이 객체인지, 자료 구조인지에 달려 있다고 설명한다.
+객체는 내부 구조를 숨겨야 하므로 디미터 법칙을 따르는 것이 좋지만 자료 구조는 당연히 내부를 노출해야 하므로 디미터 법칙을 적용할 필요가 없다.
+
+객체에게 시키는 것이 항상 가능한 것은 아니다.
+가끔씩은 물어야 한다. 여기서 강조하고 싶은 것은 소프트웨어 설계에 법칙이란 존재하지 않는다는 것이다. 원칙을 맹신하지 마라
+원칙이 적절한 상황과 부적절한 상황을 판단할 수 있는 안목을 길러라.
+
 ## 04 명령-쿼리 분리 원칙
+가끔씩은 필요에 따라 물어야 한다는 사실에 납득했다면 `명령-쿼리 분리(Command-Query Separation)` 원칙을 알아두면 도움이 될 것이다.
+
+어떤 절차를 묶어 호출 가능하도록 이름을 부여한 기능 모듈을 루틴(routine)이라고 부른다.
+루틴은 다시 프로시저(Procedure)와 함수(Function)으로 구분할 수있다.
+프로지어와 함수는 부수효과와 반환값의 유무라는 측면에 명확하게 구분된다.
+프로시저는 정해진 절차에 따라 내부의 상태를 변경하는 루틴의 한 종류이다.
+함수는 어떤 절차에 따라 필요한 값을 계산해서 반환하는 루틴의 한 종류이다.
+
+* 프로시저: 부수효과를 발생시킬 수 있지만 값을 반환할 수 없다.
+* 함수: 값을 반환할 수있지만 부수효과를 발생시킬 수 없다.
+
+`명령`과 `쿼리`는 객체의 인터페이스 측면에서 프로시저와 함수를 부르는 또 다른 이름이다.
+객체의 상태를 수정하는 오퍼레이션을 명령이라고 부르고, 객체와 관련된 정보를 반환하는 오퍼레이션을 쿼리라고 부른다.
+개념적으로 명령은 프로시저와 동일하고 쿼리는 함수와 동일하다.
+
+명령-쿼리 분리 원칙의 요지는 오퍼레이션은 부수효과를 발생시키는 명령이거나 부수효과를 발생시키지 않는 쿼리중 하나여야 한다는 점이다.
+* 객체의 상태를 변경하는 명령은 반환값을 가질 수 없다.
+* 객체의 정보를 반환하는 쿼리는 상태를 변경할 수 없다.
+
+이것을 한 문장으로 표현하면 '질문이 답변을 수정해서는 안 된다'는 것이다.
+
+> 반복 일정의 명령과 쿼리 분리하기
+
+```java
+public class Event {
+
+    private String subject;
+    private LocalDateTime from;
+    private Duration duration;
+
+    public Event(String subject, LocalDateTime from, Duration duration) {
+        this.subject = subject;
+        this.from = from;
+        this.duration = duration;
+    }
+
+    public boolean isSatisfied(RecurringSchedule schedule) {
+        if (from.getDayOfWeek() != schedule.getDayOfWeek()
+            || !from.toLocalTime().equals(schedule.getFrom())
+            || ! duration.equals(schedule.getDuration())) {
+            reschedule(schedule);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void reschedule(RecurringSchedule schedule) {
+        from = LocalDateTime.of(from.toLocalDate().plusDays(daysDistance(schedule)), schedule.getFrom());
+        duration = schedule.getDuration();
+    }
+
+    private long daysDistance(RecurringSchedule schedule) {
+        return schedule.getDayOfWeek().getValue() - from.getDayOfWeek().getValue();
+    }
+}
+```
+```java
+public class RecurringSchedule {
+
+    private String subject;
+    private DayOfWeek dayOfWeek;
+    private LocalTime from;
+    private Duration duration;
+
+    public RecurringSchedule(String subject, DayOfWeek dayOfWeek, LocalTime from, Duration duration) {
+        this.subject = subject;
+        this.dayOfWeek = dayOfWeek;
+        this.from = from;
+        this.duration = duration;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public DayOfWeek getDayOfWeek() {
+        return dayOfWeek;
+    }
+
+    public LocalTime getFrom() {
+        return from;
+    }
+
+    public Duration getDuration() {
+        return duration;
+    }
+}
+```
+
+```java
+public class Event {
+  public boolean isSatisfied(RecurringSchedule schedule) {
+      if (from.getDayOfWeek() != schedule.getDayOfWeek()
+              || !from.toLocalTime().equals(schedule.getFrom())
+              || ! duration.equals(schedule.getDuration())) {
+        return false;
+      }
+    
+      return true;
+  }
+}
+```
+* isSatisfied 메서드는 `Event`가 `RecurringSchedule`의 조건에 부합하는지 판단한 후 true / false를 반환한다. 따라서 개념적으로 쿼리다.
+* isSatisfied 메서드는 `Event`가 `RecurringSchedule`의 조건에 부합하지 않을 경우 `Event`의 상태를 조건에 부합하도록 변경한다. 따라서 부수효과를 가지는 명령이다.
+
+명령과 쿼리를 뒤섞으면 실행 결과를 예측하기가 어려워질 수 있다.
+`isSatisfied`처럼 겉으로 보기에는 쿼리처럼 보이지만 내부적으로 부수효과를 가지는 메서드는 이해하기 어렵고,
+잘못 사용하기 쉬우며, 버그를 양산하는 경향이 있다.
+
+```java
+public class Event {
+    
+    public boolean isSatisfied(RecurringSchedule schedule) {
+        if (from.getDayOfWeek() != schedule.getDayOfWeek()
+            || !from.toLocalTime().equals(schedule.getFrom())
+            || ! duration.equals(schedule.getDuration())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public void reschedule(RecurringSchedule schedule) {
+        from = LocalDateTime.of(from.toLocalDate().plusDays(daysDistance(schedule)), schedule.getFrom());
+        duration = schedule.getDuration();
+    }
+}
+```
+수정 후의 `isSatisfied` 메서드는 부수효과를 가지지 않기 때문에 순수한 쿼리가 됐다.
+`Event`는 명령과 쿼리를 분리한 상태이므로 인터페이스를 훑어 보는 것만으로도 `isSatisfied` 메서드가 쿼리이고, `reschedule` 메서드가 명령이라는 사실을 한눈에 알 수 있다.
+
+명령과 쿼리를 분리하면서 `reschedule` 메서드의 가시성이 `public`으로 변경됐다는 점을 눈여겨보라.
+`reschedule` 메서드를 외부에서 직접 접근할 수 있으므로 이제 `Event`가 `RecurringSchedule`의 조건을 만족하지 않을 경우 `reschedule` 메서드를 호출할지 여부를
+`Event`를 사용하는 쪽에서 결정할 수 있다.
+
+```java
+if (!event.isSatisfied(schedule)) {
+    event.reschedule(schdule);  
+}
+```
+ 
+> 명령-쿼리 분리와 참조 투명성
+
+부수효과를 이야기할 대 빠질 수 없는 것이 바로 `참조 투명성`이다.
+참조 투명성이란 "어떤 표현식 e가 있을 때 e의 값으로 e가 나타나는 모든 위치를 교체하더라도 결과가 달라지지 않는 특성"을 의미한다.
+
+객체지향 패러다임이 객체의 상태 변경이라는 부수효과를 기반으로 하기 때문에 참조 투명성은 예외에 가깝다.
+객체지향의 세상에서 발을 내 딘는 숙나 견고하다고 생각했던 바닥에 심각한 균형이 생기기 시작한다는 것을 알게 된다.
+하지만 명령-쿼리 분리 원칙은 부수효과를 가지는 명령으로부터 부수효과를 가지지 않는 쿼리를 명백하게 분리함으로써 제한적이나마 참조 투명성의 혜택을 누릴 수 있게 된다.
+`reschdule` 메서드를 호출하지 않는 한 `isSatisfied` 메서드를 어떤 순서로 몇 번 호출하건 상관없이 항상 결과는 동일한 것이다.
+ 
+> 책임에 초점을 맞춰라
+
+디미터 법칙을 준수하고 묻지 말고 시켜라 스타일을 따르면서도 의도를 드러내는 인터페이스를 설계하는 아주 쉬운 방법이 있다.
+메시지를 먼저 선택하고 그 후에 메시지를 처리할 객체를 선택하는 것이다.
+명령과 쿼리를 분리하고 계약에 의한 설계 개념을 통해 객체의 협력 방식을 명시적으로 드러낼 수 있는 방법이 있다.
+객체의 구현 이전에 객체 사이의 협력에 초점을 맞추고 협력 방식을 단순하고 유연하게 만드는 것이다.
+이 모든 방식의 중심에는 객체가 수행할 책임이 위치한다.
+
