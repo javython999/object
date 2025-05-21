@@ -8,3 +8,4 @@
 # [06. 메시지와 인터페이스](docs/chapter06.md)
 # [07. 객체 분해](docs/chapter07.md)
 # [08. 의존성 관리하기](docs/chapter08.md)
+# [09. 유연한 설계](docs/chapter09.md)
