@@ -9,3 +9,4 @@
 # [07. 객체 분해](docs/chapter07.md)
 # [08. 의존성 관리하기](docs/chapter08.md)
 # [09. 유연한 설계](docs/chapter09.md)
+# [10. 상속과 코드 재사용](docs/chapter10.md)
