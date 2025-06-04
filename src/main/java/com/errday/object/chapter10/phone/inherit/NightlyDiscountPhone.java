@@ -1,8 +1,8 @@
-package com.errday.object.chapter10.inherit;
+package com.errday.object.chapter10.phone.inherit;
 
-import com.errday.object.chapter10.Call;
-import com.errday.object.chapter10.Money;
-import com.errday.object.chapter10.typeclass.Phone;
+import com.errday.object.chapter10.phone.Call;
+import com.errday.object.chapter10.phone.Money;
+import com.errday.object.chapter10.phone.typeclass.Phone;
 
 import java.time.Duration;
 

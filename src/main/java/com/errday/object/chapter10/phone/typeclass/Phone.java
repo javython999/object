@@ -1,7 +1,7 @@
-package com.errday.object.chapter10.typeclass;
+package com.errday.object.chapter10.phone.typeclass;
 
-import com.errday.object.chapter10.Call;
-import com.errday.object.chapter10.Money;
+import com.errday.object.chapter10.phone.Call;
+import com.errday.object.chapter10.phone.Money;
 
 import java.time.Duration;
 import java.util.ArrayList;
