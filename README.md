@@ -12,3 +12,4 @@
 # [10. 상속과 코드 재사용](docs/chapter10.md)
 # [11. 합성과 유연한 설계](docs/chapter11.md)
 # [12. 다형성](docs/chapter12.md)
+# [13. 서브클래싱과 서브타이핑](docs/chapter13.md)
