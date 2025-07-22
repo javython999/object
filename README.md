@@ -13,3 +13,5 @@
 # [11. 합성과 유연한 설계](docs/chapter11.md)
 # [12. 다형성](docs/chapter12.md)
 # [13. 서브클래싱과 서브타이핑](docs/chapter13.md)
+# [14. 일관성 있는 협력](docs/chapter14.md)
+# [15. 디자인 패턴과 프레임워크](docs/chapter15.md)
